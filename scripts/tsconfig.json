@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "moduleResolution": "Node",
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

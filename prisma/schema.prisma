@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [citext]
+}
+
+// Enums
+enum Role {
+  STUDENT
+  FACULTY
+  DEPT_ADMIN
+  PLACEMENTS_ADMIN
+  HEAD_ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  REFRESH_TOKEN
+}
+
+// Models
+model College {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique
+  location    String?
+  website     String?
+  departments String[]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users           User[]
+  adminAuditLogs  AdminAuditLog[]
+
+  @@index([isActive])
+}
+
+model User {
+  id              String      @id @default(cuid())
+  email           String      @unique @db.Citext
+  emailVerifiedAt DateTime?
+  passwordHash    String?
+  displayName     String
+  avatarUrl       String?
+  roles           Role[]      @default([])
+  status          UserStatus  @default(PENDING_VERIFICATION)
+  tokenVersion    Int         @default(0)
+  lastLoginAt     DateTime?
+  
+  // College and profile fields
+  collegeId       String?
+  department      String?
+  year            Int?        // for students
+  collegeMemberId String?     // student ID, employee ID, etc.
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+
+  college         College?    @relation(fields: [collegeId], references: [id])
+  preferences     UserPreference?
+  accounts        OAuthAccount[]
+  securityTokens  SecurityToken[]
+  adminAuditLogs  AdminAuditLog[]
+
+  @@unique([collegeId, collegeMemberId])
+  @@index([status])
+  @@index([emailVerifiedAt])
+  @@index([collegeId, department])
+  @@index([collegeMemberId])
+  @@index([collegeId, collegeMemberId])
+}
+
+model OAuthAccount {
+  id                 String   @id @default(cuid())
+  userId             String
+  provider           String   // "google" | "github" | "credentials"
+  providerAccountId  String
+  accessToken        String?
+  refreshToken       String?
+  expiresAt          DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model SecurityToken {
+  id         String    @id @default(cuid()) // used as token id
+  userId     String
+  tokenHash  String    @unique               // hash of token secret
+  type       TokenType
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, expiresAt])
+}
+
+model UserPreference {
+  userId                    String  @id
+  enableEmailNotifications  Boolean @default(true)
+  enableInAppNotifications  Boolean @default(true)
+  timezone                  String  @default("UTC")
+  locale                    String  @default("en")
+  user                      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PendingProfileInit {
+  userId     String   @id
+  retryCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([retryCount, updatedAt])
+}
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  adminId     String   // Who performed the action
+  action      String   // What action was performed (CREATE_USER, UPDATE_USER, etc.)
+  targetType  String   // User, College, Department, etc.
+  targetId    String?  // ID of the target resource
+  details     Json?    // Additional action details
+  ipAddress   String?  // Admin's IP address
+  userAgent   String?  // Admin's user agent
+  collegeId   String   // College scope for filtering
+  success     Boolean  @default(true) // Whether the action succeeded
+  errorMessage String? // Error message if action failed
+  createdAt   DateTime @default(now())
+  
+  admin       User     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  college     College  @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  
+  @@index([adminId, createdAt])
+  @@index([collegeId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+}
