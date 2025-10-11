@@ -1,5 +1,5 @@
-import { prisma } from '../../db';
-import { AuditAction, AuditLogEntry, ADMIN_LIMITS } from '../types/adminTypes';
+import { prisma } from '../../db.js';
+import { AuditAction, AuditLogEntry, ADMIN_LIMITS } from '../types/adminTypes.js';
 
 export interface CreateAuditLogParams {
   adminId: string;

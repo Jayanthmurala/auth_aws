@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { getHealthStatus, getSystemMetrics } from '../middleware/monitoring';
+import { getHealthStatus, getSystemMetrics } from '../middleware/monitoring.js';
 
 /**
  * Monitoring and health check routes

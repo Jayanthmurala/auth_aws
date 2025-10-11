@@ -1,12 +1,12 @@
 import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { DatabaseManager } from '../config/database';
-import { RedisManager } from '../config/redis';
-import { InstanceRegistry, ResourceMonitor } from '../utils/scalability';
-import { checkDatabaseHealth } from '../db';
-import { Logger } from '../utils/logger';
-import { env } from '../config/env';
+import { DatabaseManager } from '../config/database.js';
+import { RedisManager } from '../config/redis.js';
+import { InstanceRegistry, ResourceMonitor } from '../utils/scalability.js';
+import { checkDatabaseHealth } from '../db.js';
+import { Logger } from '../utils/logger.js';
+import { env } from '../config/env.js';
 import os from 'os';
 
 /**

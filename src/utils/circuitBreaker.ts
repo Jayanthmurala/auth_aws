@@ -1,4 +1,4 @@
-import { Logger } from './logger';
+import { Logger } from './logger.js';
 
 /**
  * Circuit breaker pattern implementation for resilient service calls

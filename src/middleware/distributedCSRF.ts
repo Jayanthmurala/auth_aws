@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual, randomBytes } from 'crypto';
-import { RedisManager, RedisKeys } from '../config/redis';
-import { env } from '../config/env';
+import { RedisManager, RedisKeys } from '../config/redis.js';
+import { env } from '../config/env.js';
 
 /**
  * Distributed CSRF Protection using Redis for 10M+ users

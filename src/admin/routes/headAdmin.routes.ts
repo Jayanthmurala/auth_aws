@@ -1,10 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { requireAdmin, requireHeadAdmin } from '../middleware/adminAuth';
-import { HeadAdminController } from '../controllers/HeadAdminController';
-import { DistributedRateLimiters } from '../../middleware/distributedRateLimit';
-import { csrfProtection } from '../../middleware/distributedCSRF';
+import { requireAdmin, requireHeadAdmin } from '../middleware/adminAuth.js';
+import { HeadAdminController } from '../controllers/HeadAdminController.js';
+import { DistributedRateLimiters } from '../../middleware/distributedRateLimit.js';
+import { csrfProtection } from '../../middleware/distributedCSRF.js';
 import {
   createUserSchema,
   updateUserSchema,
@@ -20,7 +20,7 @@ import {
   errorResponseSchema,
   headAdminCreateUserSchema,
   headAdminUpdateUserSchema
-} from '../validators/adminUserSchemas';
+} from '../validators/adminUserSchemas.js';
 import {
   updateCollegeSchema,
   addDepartmentSchema,
@@ -32,7 +32,7 @@ import {
   departmentUpdateResponseSchema,
   transferResponseSchema,
   collegeErrorResponseSchema
-} from '../validators/adminCollegeSchemas';
+} from '../validators/adminCollegeSchemas.js';
 import {
   analyticsQuerySchema,
   auditLogsQuerySchema,
@@ -41,7 +41,7 @@ import {
   analyticsResponseSchema,
   auditLogsResponseSchema,
   analyticsErrorResponseSchema
-} from '../validators/adminAnalyticsSchemas';
+} from '../validators/adminAnalyticsSchemas.js';
 
 export async function headAdminRoutes(app: FastifyInstance) {
   const f = app.withTypeProvider<ZodTypeProvider>();

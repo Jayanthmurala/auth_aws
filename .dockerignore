@@ -1,98 +1,119 @@
 # =============================================================================
-# .dockerignore - Nexus Auth Service
-# Excludes files from Docker build context for faster builds and smaller images
+# Docker Ignore File - Nexus Auth Service
+# Excludes unnecessary files from Docker build context
 # =============================================================================
 
-# Dependencies (will be installed in container)
+# Node.js
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
+.npm
+.yarn
 
-# Build outputs (will be built inside container)
+# Build outputs (will be generated in container)
 dist/
 build/
 *.tsbuildinfo
 
-# Environment files (will be managed separately)
+# Environment files (secrets should not be in image)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 
-# Database files
-*.db
-*.sqlite
-*.sqlite3
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+.nyc_output
+tests/
+__tests__/
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CHANGELOG.md
+LICENSE
+*.md
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
 
 # Logs
 logs/
 *.log
+
+# Runtime data
 pids/
 *.pid
 *.seed
 *.pid.lock
 
-# Coverage and test outputs
+# Coverage directory used by tools like istanbul
 coverage/
-*.lcov
-.nyc_output
+.nyc_output/
 
-# Development and documentation files
-.git/
-.gitignore
-README.md
-*.md
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env.test
+.env.production
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# Temporary folders
+tmp/
+temp/
+
+# Editor directories and files
 .vscode/
 .idea/
-.editorconfig
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Temporary files
-*.tmp
-*.temp
-
-# Prisma migrations (migrations run separately, not in container)
-prisma/migrations/
-
-# Test files (not needed in production)
-tests/
-*.test.ts
-*.spec.ts
-vitest.config.ts
-
-# Development tools and scripts
-auth-load-tests/
-scripts/seed-superadmin.ts
-scripts/promote.ts
-scripts/check-connection.ts
-
-# Generated keys (will be set via environment variables)
-generated_keys.env
-
-# Docker files (not needed inside container)
-Dockerfile*
-docker-compose*.yml
-.dockerignore
-
-# AWS deployment files (not needed in container)
-aws-deployment/
-
-# CI/CD files
-.github/
-.gitlab-ci.yml
-.travis.yml
-
-# Documentation
-docs/
-*.md
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

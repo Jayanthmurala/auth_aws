@@ -1,6 +1,6 @@
-import { RedisManager, RedisKeys } from '../config/redis';
-import { env } from '../config/env';
-import { prisma } from '../db';
+import { RedisManager, RedisKeys } from '../config/redis.js';
+import { env } from '../config/env.js';
+import { prisma } from '../db.js';
 
 /**
  * Redis-based session and user data caching for 10M+ users

@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { env } from "./config/env";
+import { env } from "./config/env.js";
 
 // Connection pool configuration for high load
 const connectionLimit = parseInt(process.env.DB_CONNECTION_LIMIT || '100');

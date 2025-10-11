@@ -1,6 +1,47 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import DOMPurify from 'isomorphic-dompurify';
-import { Logger } from '../utils/logger';
+// import DOMPurify from 'isomorphic-dompurify'; // Removed due to Node.js 18 compatibility
+// Using simple string sanitization instead
+
+/**
+ * Simple HTML/XSS sanitization function
+ * Replaces DOMPurify for Node.js 18 compatibility
+ */
+function simpleSanitize(input: string, options: { 
+  ALLOWED_TAGS?: string[], 
+  ALLOWED_ATTR?: string[], 
+  KEEP_CONTENT?: boolean,
+  ALLOW_DATA_ATTR?: boolean,
+  ALLOW_UNKNOWN_PROTOCOLS?: boolean,
+  SANITIZE_DOM?: boolean
+} = {}): string {
+  if (!input || typeof input !== 'string') return input;
+  
+  // Remove script tags and their content
+  let sanitized = input.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  
+  // Remove dangerous HTML tags
+  const dangerousTags = ['script', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button'];
+  for (const tag of dangerousTags) {
+    const regex = new RegExp(`<${tag}\\b[^>]*>.*?<\\/${tag}>`, 'gi');
+    sanitized = sanitized.replace(regex, '');
+  }
+  
+  // Remove event handlers (onclick, onload, etc.)
+  sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
+  
+  // Remove javascript: URLs
+  sanitized = sanitized.replace(/javascript\s*:/gi, '');
+  
+  // If no tags allowed, remove all HTML tags but keep content
+  if (options.ALLOWED_TAGS && options.ALLOWED_TAGS.length === 0) {
+    if (options.KEEP_CONTENT) {
+      sanitized = sanitized.replace(/<[^>]*>/g, '');
+    }
+  }
+  
+  return sanitized;
+}
+import { Logger } from '../utils/logger.js';
 
 /**
  * Input sanitization middleware to prevent XSS attacks
@@ -35,7 +76,7 @@ function sanitizeObject(obj: any, options: Required<SanitizationOptions>): any {
 
   if (typeof obj === 'string') {
     const original = obj;
-    const sanitized = DOMPurify.sanitize(obj, {
+    const sanitized = simpleSanitize(obj, {
       ALLOWED_TAGS: options.allowedTags,
       ALLOWED_ATTR: options.allowedAttributes,
       KEEP_CONTENT: true, // Keep text content even if tags are removed
@@ -67,7 +108,7 @@ function sanitizeObject(obj: any, options: Required<SanitizationOptions>): any {
     for (const [key, value] of Object.entries(obj)) {
       // Sanitize both key and value
       const sanitizedKey = typeof key === 'string' 
-        ? DOMPurify.sanitize(key, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] })
+        ? simpleSanitize(key, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] })
         : key;
       sanitized[sanitizedKey] = sanitizeObject(value, options);
     }
@@ -103,7 +144,7 @@ export function createInputSanitizer(options: SanitizationOptions = {}) {
         const headersToSanitize = ['user-agent', 'referer', 'x-forwarded-for'];
         for (const header of headersToSanitize) {
           if (request.headers[header] && typeof request.headers[header] === 'string') {
-            request.headers[header] = DOMPurify.sanitize(request.headers[header] as string, {
+            request.headers[header] = simpleSanitize(request.headers[header] as string, {
               ALLOWED_TAGS: [],
               ALLOWED_ATTR: []
             });
@@ -186,7 +227,7 @@ export function sanitizeString(input: string, options: {
   allowedTags?: string[];
   allowedAttributes?: string[];
 } = {}): string {
-  return DOMPurify.sanitize(input, {
+  return simpleSanitize(input, {
     ALLOWED_TAGS: options.allowedTags || [],
     ALLOWED_ATTR: options.allowedAttributes || [],
     KEEP_CONTENT: true,
@@ -201,7 +242,7 @@ export function sanitizeString(input: string, options: {
  */
 export function containsPotentialXSS(input: string): boolean {
   const original = input;
-  const sanitized = DOMPurify.sanitize(input, {
+  const sanitized = simpleSanitize(input, {
     ALLOWED_TAGS: [],
     ALLOWED_ATTR: [],
     KEEP_CONTENT: true

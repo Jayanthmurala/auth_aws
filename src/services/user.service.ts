@@ -1,5 +1,5 @@
 import { Prisma, Role, UserStatus } from "@prisma/client";
-import { prisma } from "../db";
+import { prisma } from "../db.js";
 
 export async function findUserByEmail(email: string) {
   return prisma.user.findUnique({ where: { email } });

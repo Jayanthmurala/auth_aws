@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { env } from '../config/env';
+import { env } from '../config/env.js';
 
 /**
  * Standard success response format

@@ -1,8 +1,8 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { verifyAccessToken } from '../../utils/jwt';
-import { prisma } from '../../db';
+import { verifyAccessToken } from '../../utils/jwt.js';
+import { prisma } from '../../db.js';
 import { Role } from '@prisma/client';
-import { AdminContext, AdminPermissions, AdminRole } from '../types/adminTypes';
+import { AdminContext, AdminPermissions, AdminRole } from '../types/adminTypes.js';
 
 export interface AdminRequest extends FastifyRequest {
   admin: AdminContext;

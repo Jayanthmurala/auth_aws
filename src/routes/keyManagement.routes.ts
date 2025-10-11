@@ -1,10 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { JWTKeyRotationService } from '../services/JWTKeyRotationService';
-import { authenticateUser, requireRoles } from '../middleware/authMiddleware';
-import { DistributedRateLimiters } from '../middleware/distributedRateLimit';
-import { AuditLogger } from '../middleware/auditLogger';
+import { JWTKeyRotationService } from '../services/JWTKeyRotationService.js';
+import { authenticateUser, requireRoles } from '../middleware/authMiddleware.js';
+import { DistributedRateLimiters } from '../middleware/distributedRateLimit.js';
+import { AuditLogger } from '../middleware/auditLogger.js';
 
 // Validation schemas
 const keyRotationConfigSchema = z.object({

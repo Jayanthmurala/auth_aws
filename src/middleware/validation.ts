@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { z, ZodSchema } from 'zod';
-import { createErrorResponse } from './errorHandler';
+import { createErrorResponse } from './errorHandler.js';
 
 /**
  * Input sanitization utilities

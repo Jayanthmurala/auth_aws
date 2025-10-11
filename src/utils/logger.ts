@@ -1,5 +1,5 @@
 import { FastifyRequest } from 'fastify';
-import { env } from '../config/env';
+import { env } from '../config/env.js';
 
 export interface LogContext {
   userId?: string;

@@ -1,6 +1,6 @@
-import { prisma } from '../../db';
+import { prisma } from '../../db.js';
 import { Role, UserStatus } from '@prisma/client';
-import { CollegeAnalytics, DepartmentAnalytics } from '../types/adminTypes';
+import { CollegeAnalytics, DepartmentAnalytics } from '../types/adminTypes.js';
 
 export class AdminAnalyticsService {
   /**

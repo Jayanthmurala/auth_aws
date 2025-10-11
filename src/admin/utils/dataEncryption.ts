@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-import { env } from '../../config/env';
+import { env } from '../../config/env.js';
 
 /**
  * Data Encryption Utilities for Sensitive Admin Exports

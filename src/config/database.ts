@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import { env } from './env';
-import { Logger } from '../utils/logger';
+import { env } from './env.js';
+import { Logger } from '../utils/logger.js';
 
 /**
  * Database configuration with read replica support for scalability

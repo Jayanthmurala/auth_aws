@@ -1,6 +1,6 @@
-import { prisma } from '../../db';
+import { prisma } from '../../db.js';
 import { Role, UserStatus } from '@prisma/client';
-import { hashPassword } from '../../utils/crypto';
+import { hashPassword } from '../../utils/crypto.js';
 import { 
   CreateUserRequest, 
   UpdateUserRequest, 
@@ -9,8 +9,8 @@ import {
   BulkUserOperation,
   BulkOperationResult,
   ADMIN_LIMITS
-} from '../types/adminTypes';
-import { checkAdminLimits } from '../middleware/collegeScope';
+} from '../types/adminTypes.js';
+import { checkAdminLimits } from '../middleware/collegeScope.js';
 
 export class AdminUserService {
   /**

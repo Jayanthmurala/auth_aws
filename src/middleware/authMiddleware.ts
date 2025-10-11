@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { verifyAccessToken } from '../utils/jwt';
-import { prisma } from '../db';
+import { verifyAccessToken } from '../utils/jwt.js';
+import { prisma } from '../db.js';
 import { Role } from '@prisma/client';
 
 // Extend FastifyRequest to include user

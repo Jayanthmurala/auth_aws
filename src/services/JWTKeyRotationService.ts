@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from 'crypto';
-import { RedisManager, RedisKeys } from '../config/redis';
-import { env } from '../config/env';
-import { AuditLogger } from '../middleware/auditLogger';
+import { RedisManager, RedisKeys } from '../config/redis.js';
+import { env } from '../config/env.js';
+import { AuditLogger } from '../middleware/auditLogger.js';
 
 /**
  * JWT Key Rotation Service for enterprise-grade security

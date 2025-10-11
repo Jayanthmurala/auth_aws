@@ -1,6 +1,6 @@
 import Redis, { Cluster, RedisOptions, ClusterOptions } from 'ioredis';
-import { env } from './env';
-import { Logger } from '../utils/logger';
+import { env } from './env.js';
+import { Logger } from '../utils/logger.js';
 
 /**
  * Redis configuration for 10M+ user scale with clustering support

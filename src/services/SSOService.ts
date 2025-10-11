@@ -1,10 +1,10 @@
 import { randomBytes, createHash } from 'crypto';
 import { Role } from '@prisma/client';
-import { RedisManager } from '../config/redis';
-import { env } from '../config/env';
-import { prisma } from '../db';
-import { AuditLogger } from '../middleware/auditLogger';
-import { signAccessToken } from '../utils/jwt';
+import { RedisManager } from '../config/redis.js';
+import { env } from '../config/env.js';
+import { prisma } from '../db.js';
+import { AuditLogger } from '../middleware/auditLogger.js';
+import { signAccessToken } from '../utils/jwt.js';
 
 /**
  * Single Sign-On (SSO) Service

@@ -1,4 +1,4 @@
-import { prisma } from '../../db';
+import { prisma } from '../../db.js';
 import { Role } from '@prisma/client';
 
 export interface UpdateCollegeRequest {

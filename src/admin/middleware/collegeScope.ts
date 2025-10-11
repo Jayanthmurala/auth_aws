@@ -1,5 +1,5 @@
 import { FastifyRequest } from 'fastify';
-import { AdminRequest } from './adminAuth';
+import { AdminRequest } from './adminAuth.js';
 import { Role } from '@prisma/client';
 
 /**
@@ -172,7 +172,7 @@ export async function checkAdminLimits(
   department: string | undefined,
   targetRole: Role
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const { prisma } = await import('../../db');
+  const { prisma } = await import('../../db.js');
   
   if (targetRole === 'HEAD_ADMIN') {
     const headAdminCount = await prisma.user.count({

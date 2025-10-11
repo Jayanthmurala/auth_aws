@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createGzip, createDeflate, createBrotliCompress } from 'zlib';
 import { pipeline } from 'stream';
 import { promisify } from 'util';
-import { Logger } from '../utils/logger';
+import { Logger } from '../utils/logger.js';
 
 /**
  * Advanced compression middleware for bandwidth optimization

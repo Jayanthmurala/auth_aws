@@ -1,7 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { env } from '../config/env';
-import { prisma } from '../db';
-import { RedisManager } from '../config/redis';
+import { env } from '../config/env.js';
+import { prisma } from '../db.js';
+import { RedisManager } from '../config/redis.js';
 
 /**
  * System metrics interface

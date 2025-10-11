@@ -1,10 +1,10 @@
 import { authenticator } from 'otplib';
 import qrcode from 'qrcode';
 import { randomBytes, createHash } from 'crypto';
-import { RedisManager, RedisKeys } from '../config/redis';
-import { env } from '../config/env';
-import { prisma } from '../db';
-import { AuditLogger } from '../middleware/auditLogger';
+import { RedisManager, RedisKeys } from '../config/redis.js';
+import { env } from '../config/env.js';
+import { prisma } from '../db.js';
+import { AuditLogger } from '../middleware/auditLogger.js';
 
 /**
  * Multi-Factor Authentication Service

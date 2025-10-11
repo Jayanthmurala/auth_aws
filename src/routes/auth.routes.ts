@@ -2,22 +2,22 @@ import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import crypto from "node:crypto";
-import { prisma } from "../db";
-import { env } from "../config/env";
+import { prisma } from "../db.js";
+import { env } from "../config/env.js";
 import { Role, UserStatus } from "@prisma/client";
-import { hashPassword, verifyPassword, hashSecret, verifySecret } from "../utils/crypto";
-import { signAccessToken, verifyAccessToken, blacklistToken } from "../utils/jwt";
-import { Logger } from "../utils/logger";
-import { InputSanitizers, createXSSValidator } from "../middleware/inputSanitization";
-import { validatePassword, DEFAULT_PASSWORD_POLICY, getPasswordStrengthText } from "../utils/passwordValidation";
-import { findUserByEmail, withPerformanceMonitoring } from "../utils/queryOptimization";
-import { CacheConfigs } from "../middleware/responseCaching";
-import { authSuccessResponseSchema, loginBodySchema, errorResponseSchema, oauthExchangeBodySchema, forgotPasswordBodySchema, resetPasswordBodySchema, verifyEmailBodySchema, resendVerificationBodySchema, messageResponseSchema, registerBodySchema } from "../schemas/auth.schemas";
-import { ProfileInitializationService } from "../services/ProfileInitializationService";
-import { authenticateUser, authenticateApiKey } from "../middleware/authMiddleware";
-import { sendPasswordResetEmail, sendVerificationEmail } from "../emails/simple-mailer";
-import { RateLimiters, createEmailRateLimit } from "../middleware/rateLimitMiddleware";
-import { rotateRefreshToken as rotateRefreshTokenService } from "../services/token.service";
+import { hashPassword, verifyPassword, hashSecret, verifySecret } from "../utils/crypto.js";
+import { signAccessToken, verifyAccessToken, blacklistToken } from "../utils/jwt.js";
+import { Logger } from "../utils/logger.js";
+import { InputSanitizers, createXSSValidator } from "../middleware/inputSanitization.js";
+import { validatePassword, DEFAULT_PASSWORD_POLICY, getPasswordStrengthText } from "../utils/passwordValidation.js";
+import { findUserByEmail, withPerformanceMonitoring } from "../utils/queryOptimization.js";
+import { CacheConfigs } from "../middleware/responseCaching.js";
+import { authSuccessResponseSchema, loginBodySchema, errorResponseSchema, oauthExchangeBodySchema, forgotPasswordBodySchema, resetPasswordBodySchema, verifyEmailBodySchema, resendVerificationBodySchema, messageResponseSchema, registerBodySchema } from "../schemas/auth.schemas.js";
+import { ProfileInitializationService } from "../services/ProfileInitializationService.js";
+import { authenticateUser, authenticateApiKey } from "../middleware/authMiddleware.js";
+import { sendPasswordResetEmail, sendVerificationEmail } from "../emails/simple-mailer.js";
+import { RateLimiters, createEmailRateLimit } from "../middleware/rateLimitMiddleware.js";
+import { rotateRefreshToken as rotateRefreshTokenService } from "../services/token.service.js";
 
 const usersQuerySchema = z.object({
   limit: z.string().optional(),

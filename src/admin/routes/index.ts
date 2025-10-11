@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
-import headAdminRoutes from './headAdmin.routes';
-import deptAdminRoutes from './deptAdmin.routes';
-import placementsAdminRoutes from './placementsAdmin.routes';
+import headAdminRoutes from './headAdmin.routes.js';
+import deptAdminRoutes from './deptAdmin.routes.js';
+import placementsAdminRoutes from './placementsAdmin.routes.js';
 
 /**
  * Register all admin routes

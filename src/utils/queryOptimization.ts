@@ -1,5 +1,5 @@
-import { prisma } from '../db';
-import { Logger } from './logger';
+import { prisma } from '../db.js';
+import { Logger } from './logger.js';
 
 /**
  * Database query optimization utilities

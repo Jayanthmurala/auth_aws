@@ -4,13 +4,13 @@ import { z } from 'zod';
 import { 
   getSecurityStats,
   AdvancedRateLimit 
-} from '../middleware/advancedSecurity';
-import { generateCSRFToken } from '../middleware/distributedCSRF';
-import { ResponseWrapper } from '../middleware/responseWrapper';
-import { AuditLogger } from '../middleware/auditLogger';
-import { authenticateUser, requireRoles } from '../middleware/authMiddleware';
-import { RateLimiters } from '../middleware/rateLimitMiddleware';
-import { DistributedRateLimiters } from '../middleware/distributedRateLimit';
+} from '../middleware/advancedSecurity.js';
+import { generateCSRFToken } from '../middleware/distributedCSRF.js';
+import { ResponseWrapper } from '../middleware/responseWrapper.js';
+import { AuditLogger } from '../middleware/auditLogger.js';
+import { authenticateUser, requireRoles } from '../middleware/authMiddleware.js';
+import { RateLimiters } from '../middleware/rateLimitMiddleware.js';
+import { DistributedRateLimiters } from '../middleware/distributedRateLimit.js';
 
 // Define validation schemas for security endpoints
 const ipAddressSchema = z.object({

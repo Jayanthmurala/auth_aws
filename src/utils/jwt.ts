@@ -1,8 +1,8 @@
 import { SignJWT, importPKCS8, importSPKI, exportJWK, JWTPayload, KeyLike, jwtVerify, decodeProtectedHeader } from "jose";
-import { env } from "../config/env";
-import { JWTKeyRotationService } from "../services/JWTKeyRotationService";
-import { RedisManager } from "../config/redis";
-import { Logger } from "./logger";
+import { env } from "../config/env.js";
+import { JWTKeyRotationService } from "../services/JWTKeyRotationService.js";
+import { RedisManager } from "../config/redis.js";
+import { Logger } from "./logger.js";
 
 let privateKeyPromise: Promise<KeyLike> | null = null;
 let publicKeyPromise: Promise<KeyLike> | null = null;

@@ -1,10 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { MFAService } from '../services/MFAService';
-import { authenticateUser, requireRoles } from '../middleware/authMiddleware';
-import { DistributedRateLimiters } from '../middleware/distributedRateLimit';
-import { AuditLogger } from '../middleware/auditLogger';
+import { MFAService } from '../services/MFAService.js';
+import { authenticateUser, requireRoles } from '../middleware/authMiddleware.js';
+import { DistributedRateLimiters } from '../middleware/distributedRateLimit.js';
+import { AuditLogger } from '../middleware/auditLogger.js';
 
 // Validation schemas
 const totpSetupResponseSchema = z.object({

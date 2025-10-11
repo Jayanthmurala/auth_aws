@@ -1,7 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { createHash, randomBytes, createHmac, timingSafeEqual } from 'crypto';
-import { env } from '../config/env';
-import { createErrorResponse } from './errorHandler';
+import { env } from '../config/env.js';
+import { createErrorResponse } from './errorHandler.js';
 
 /**
  * Enhanced CSRF Protection Implementation with HMAC and Redis support

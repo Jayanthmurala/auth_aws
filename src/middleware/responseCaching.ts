@@ -1,7 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { RedisManager } from '../config/redis';
-import { env } from '../config/env';
-import { Logger } from '../utils/logger';
+import { RedisManager } from '../config/redis.js';
+import { env } from '../config/env.js';
+import { Logger } from '../utils/logger.js';
 import crypto from 'node:crypto';
 
 /**

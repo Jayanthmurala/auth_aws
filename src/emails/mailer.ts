@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import mjml2html from "mjml";
-import { env } from "../config/env";
-import { resetPasswordMjml, verifyEmailMjml } from "./templates";
+import { env } from "../config/env.js";
+import { resetPasswordMjml, verifyEmailMjml } from "./templates.js";
 
 let transporterPromise: Promise<nodemailer.Transporter> | null = null;
 

@@ -1,9 +1,9 @@
 import { FastifyInstance } from 'fastify';
-import { Logger } from './logger';
-import { DatabaseManager } from '../config/database';
-import { RedisManager } from '../config/redis';
-import { JWTKeyRotationService } from '../services/JWTKeyRotationService';
-import { InstanceRegistry } from './scalability';
+import { Logger } from './logger.js';
+import { DatabaseManager } from '../config/database.js';
+import { RedisManager } from '../config/redis.js';
+import { JWTKeyRotationService } from '../services/JWTKeyRotationService.js';
+import { InstanceRegistry } from './scalability.js';
 
 /**
  * Graceful shutdown manager for clean application termination

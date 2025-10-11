@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { RedisManager, RedisKeys } from '../config/redis';
-import { env } from '../config/env';
+import { RedisManager, RedisKeys } from '../config/redis.js';
+import { env } from '../config/env.js';
 
 /**
  * Distributed rate limiting using Redis for 10M+ users

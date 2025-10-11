@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { requireAdmin, requirePlacementsAdmin } from '../middleware/adminAuth';
-import { PlacementsAdminController } from '../controllers/PlacementsAdminController';
+import { requireAdmin, requirePlacementsAdmin } from '../middleware/adminAuth.js';
+import { PlacementsAdminController } from '../controllers/PlacementsAdminController.js';
 import {
   userFiltersSchema,
   paginationSchema,
@@ -11,7 +11,7 @@ import {
   errorResponseSchema,
   placementsAdminCreateUserSchema,
   placementsAdminUpdateUserSchema
-} from '../validators/adminUserSchemas';
+} from '../validators/adminUserSchemas.js';
 import {
   analyticsQuerySchema,
   auditLogsQuerySchema,
@@ -20,7 +20,7 @@ import {
   placementAnalyticsResponseSchema,
   auditLogsResponseSchema,
   analyticsErrorResponseSchema
-} from '../validators/adminAnalyticsSchemas';
+} from '../validators/adminAnalyticsSchemas.js';
 import { z } from 'zod';
 
 // Placement-specific schemas

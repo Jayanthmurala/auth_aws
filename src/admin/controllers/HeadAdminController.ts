@@ -1,14 +1,14 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { AdminRequest } from '../middleware/adminAuth';
-import { AdminUserService } from '../services/AdminUserService';
-import { AdminCollegeService } from '../services/AdminCollegeService';
-import { AdminAnalyticsService } from '../services/AdminAnalyticsService';
-import { AdminAuditService } from '../services/AdminAuditService';
-import { logAdminAction } from '../middleware/auditLogger';
-import { AdminConfirmationService } from '../services/AdminConfirmationService';
-import { env } from '../../config/env';
-import { prisma } from '../../db';
+import { AdminRequest } from '../middleware/adminAuth.js';
+import { AdminUserService } from '../services/AdminUserService.js';
+import { AdminCollegeService } from '../services/AdminCollegeService.js';
+import { AdminAnalyticsService } from '../services/AdminAnalyticsService.js';
+import { AdminAuditService } from '../services/AdminAuditService.js';
+import { logAdminAction } from '../middleware/auditLogger.js';
+import { AdminConfirmationService } from '../services/AdminConfirmationService.js';
+import { env } from '../../config/env.js';
+import { prisma } from '../../db.js';
 import { 
   CreateUserRequest, 
   UpdateUserRequest, 
@@ -16,7 +16,7 @@ import {
   AdminResponse,
   AdminUserFilters,
   PaginationParams
-} from '../types/adminTypes';
+} from '../types/adminTypes.js';
 import { 
   parseAndValidateQuery,
   userFiltersQuerySchema,
@@ -24,14 +24,14 @@ import {
   analyticsQuerySchema,
   auditLogsQuerySchema,
   exportQuerySchema
-} from '../utils/inputValidation';
+} from '../utils/inputValidation.js';
 import {
   validateRoleEscalation,
   canManageUser,
   canAssignRoles,
   validateBulkOperationPermissions,
   logPrivilegeOperation
-} from '../utils/roleHierarchy';
+} from '../utils/roleHierarchy.js';
 import {
   encryptExportData,
   requiresEncryption,
@@ -39,11 +39,11 @@ import {
   validateEncryptionKey,
   logEncryptionOperation,
   sanitizeExportData
-} from '../utils/dataEncryption';
+} from '../utils/dataEncryption.js';
 import { 
   getCollegeScopedWhere, 
   canAccessCollegeResource 
-} from '../middleware/collegeScope';
+} from '../middleware/collegeScope.js';
 
 export class HeadAdminController {
   /**

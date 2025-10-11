@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { prisma } from "../db";
-import { authenticateUser } from "../middleware/authMiddleware";
-import { DistributedRateLimiters } from "../middleware/distributedRateLimit";
-import { emitCollegeEvent } from "../events/collegeEvents";
+import { prisma } from "../db.js";
+import { authenticateUser } from "../middleware/authMiddleware.js";
+import { DistributedRateLimiters } from "../middleware/distributedRateLimit.js";
+import { emitCollegeEvent } from "../events/collegeEvents.js";
 
 // P1-1: User activity logging for college operations
 async function logUserActivity(

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
-import { env } from '../config/env';
-import { Logger } from './logger';
-import { RedisManager } from '../config/redis';
+import { env } from '../config/env.js';
+import { Logger } from './logger.js';
+import { RedisManager } from '../config/redis.js';
 import os from 'os';
 import cluster from 'cluster';
 

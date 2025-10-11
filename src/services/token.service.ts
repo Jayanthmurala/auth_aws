@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
-import { prisma } from "../db";
+import { prisma } from "../db.js";
 import { TokenType } from "@prisma/client";
-import { hashSecret, verifySecret } from "../utils/crypto";
-import { env } from "../config/env";
-import { Logger } from "../utils/logger";
-import { RedisManager } from "../config/redis";
+import { hashSecret, verifySecret } from "../utils/crypto.js";
+import { env } from "../config/env.js";
+import { Logger } from "../utils/logger.js";
+import { RedisManager } from "../config/redis.js";
 
 const REFRESH_COOKIE = "rt";
 

@@ -1,20 +1,20 @@
 import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { prisma } from "../db";
+import { prisma } from "../db.js";
 import { Role, UserStatus } from "@prisma/client";
-import { authenticateUser, optionalAuth } from "../middleware/authMiddleware";
+import { authenticateUser, optionalAuth } from "../middleware/authMiddleware.js";
 import { 
   errorResponseSchema, 
   userUpdateBodySchema, 
   userSearchQuerySchema, 
   userBatchBodySchema,
   UserUpdateBody 
-} from "../schemas/auth.schemas";
-import { RateLimiters } from "../middleware/rateLimitMiddleware";
-import * as userService from "../services/user.service";
-import { csrfProtection } from "../middleware/distributedCSRF";
-import { redis } from "../config/redis";
+} from "../schemas/auth.schemas.js";
+import { RateLimiters } from "../middleware/rateLimitMiddleware.js";
+import * as userService from "../services/user.service.js";
+import { csrfProtection } from "../middleware/distributedCSRF.js";
+import { redis } from "../config/redis.js";
 
 // SECURITY: Input sanitization utility
 function sanitizeInput(input: string): string {

@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { env } from '../config/env';
+import { env } from '../config/env.js';
 
 /**
  * Request signing middleware for internal APIs

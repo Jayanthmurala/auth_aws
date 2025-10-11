@@ -1,10 +1,10 @@
 import { FastifyReply, FastifyRequest } from "fastify";
-import { loginBodySchema, registerBodySchema } from "../schemas/auth.schemas";
-import { createUser, findUserByEmail, findUserById, markLogin } from "../services/user.service";
-import { hashPassword, verifyPassword } from "../utils/crypto";
-import { getRefreshCookieName, getRefreshCookieOptions, issueRefreshToken, rotateRefreshToken } from "../services/token.service";
-import { signAccessToken } from "../utils/jwt";
-import { prisma } from "../db";
+import { loginBodySchema, registerBodySchema } from "../schemas/auth.schemas.js";
+import { createUser, findUserByEmail, findUserById, markLogin } from "../services/user.service.js";
+import { hashPassword, verifyPassword } from "../utils/crypto.js";
+import { getRefreshCookieName, getRefreshCookieOptions, issueRefreshToken, rotateRefreshToken } from "../services/token.service.js";
+import { signAccessToken } from "../utils/jwt.js";
+import { prisma } from "../db.js";
 
 export async function registerHandler(req: FastifyRequest, reply: FastifyReply) {
   const body = registerBodySchema.parse(req.body);

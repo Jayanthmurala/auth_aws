@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { AdminRequest } from './adminAuth';
-import { AuditAction } from '../types/adminTypes';
+import { AdminRequest } from './adminAuth.js';
+import { AuditAction } from '../types/adminTypes.js';
 
 /**
  * Middleware to automatically log admin actions
@@ -105,7 +105,7 @@ export async function logAdminAction(
 
   try {
     // Import AdminAuditService dynamically to avoid circular dependency
-    const { AdminAuditService } = await import('../services/AdminAuditService');
+    const { AdminAuditService } = await import('../services/AdminAuditService.js');
     
     await AdminAuditService.logAction({
       adminId: adminRequest.admin.id,

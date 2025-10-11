@@ -2,11 +2,11 @@ import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { Role, UserStatus } from '@prisma/client';
-import { prisma } from '../db';
-import { authenticateApiKey } from '../middleware/authMiddleware';
-import { RateLimiters } from '../middleware/rateLimitMiddleware';
-import { DistributedRateLimiters } from '../middleware/distributedRateLimit';
-import { validateRequestSignature } from '../middleware/requestSigning';
+import { prisma } from '../db.js';
+import { authenticateApiKey } from '../middleware/authMiddleware.js';
+import { RateLimiters } from '../middleware/rateLimitMiddleware.js';
+import { DistributedRateLimiters } from '../middleware/distributedRateLimit.js';
+import { validateRequestSignature } from '../middleware/requestSigning.js';
 
 // Define validation schemas
 const userIdParamsSchema = z.object({

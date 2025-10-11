@@ -1,6 +1,6 @@
 import { FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { AdminResponse } from '../types/adminTypes';
+import { AdminResponse } from '../types/adminTypes.js';
 
 /**
  * Standardized Error Response Handler for Admin Operations

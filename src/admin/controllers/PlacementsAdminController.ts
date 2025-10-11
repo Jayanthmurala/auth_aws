@@ -1,17 +1,17 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { AdminRequest } from '../middleware/adminAuth';
-import { AdminUserService } from '../services/AdminUserService';
-import { AdminAnalyticsService } from '../services/AdminAnalyticsService';
-import { AdminAuditService } from '../services/AdminAuditService';
-import { logAdminAction } from '../middleware/auditLogger';
+import { AdminRequest } from '../middleware/adminAuth.js';
+import { AdminUserService } from '../services/AdminUserService.js';
+import { AdminAnalyticsService } from '../services/AdminAnalyticsService.js';
+import { AdminAuditService } from '../services/AdminAuditService.js';
+import { logAdminAction } from '../middleware/auditLogger.js';
 import { 
   CreateUserRequest, 
   UpdateUserRequest, 
   AdminResponse,
   AdminUserFilters,
   PaginationParams
-} from '../types/adminTypes';
-import { getPlacementScopedWhere } from '../middleware/collegeScope';
+} from '../types/adminTypes.js';
+import { getPlacementScopedWhere } from '../middleware/collegeScope.js';
 
 export class PlacementsAdminController {
   /**

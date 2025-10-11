@@ -1,9 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { requireAdmin, requireDeptAdmin } from '../middleware/adminAuth';
-import { DeptAdminController } from '../controllers/DeptAdminController';
-import { DistributedRateLimiters } from '../../middleware/distributedRateLimit';
-import { csrfProtection } from '../../middleware/distributedCSRF';
+import { requireAdmin, requireDeptAdmin } from '../middleware/adminAuth.js';
+import { DeptAdminController } from '../controllers/DeptAdminController.js';
+import { DistributedRateLimiters } from '../../middleware/distributedRateLimit.js';
+import { csrfProtection } from '../../middleware/distributedCSRF.js';
 import {
   deptAdminQuerySchema,
   auditLogsQuerySchema as userAuditLogsQuerySchema,
@@ -16,7 +16,7 @@ import {
   deptAdminUpdateUserSchema,
   updateUserStatusSchema,
   createUserResponseSchema
-} from '../validators/adminUserSchemas';
+} from '../validators/adminUserSchemas.js';
 import {
   analyticsQuerySchema,
   auditLogsQuerySchema as analyticsAuditLogsQuerySchema,
@@ -25,7 +25,7 @@ import {
   departmentAnalyticsResponseSchema,
   auditLogsResponseSchema,
   analyticsErrorResponseSchema
-} from '../validators/adminAnalyticsSchemas';
+} from '../validators/adminAnalyticsSchemas.js';
 
 export async function deptAdminRoutes(app: FastifyInstance) {
   const f = app.withTypeProvider<ZodTypeProvider>();
