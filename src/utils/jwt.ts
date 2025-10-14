@@ -141,8 +141,35 @@ export async function signAccessToken(subject: string, claims: Record<string, an
 }
 
 export async function getJWKS() {
-  const jwk = await publicJWKPromise!;
-  return { keys: [jwk] };
+  const keys = [];
+  
+  // Add static environment key
+  const staticJwk = await publicJWKPromise!;
+  keys.push(staticJwk);
+  
+  // Add dynamic rotation keys
+  try {
+    const activeKeys = await JWTKeyRotationService.getActiveKeys();
+    for (const keyPair of activeKeys) {
+      if (keyPair.status === 'active' || keyPair.status === 'rotating') {
+        // Convert PEM public key to JWK format
+        const { importSPKI, exportJWK } = await import('jose');
+        const publicKey = await importSPKI(keyPair.publicKey, keyPair.algorithm as any);
+        const jwk = await exportJWK(publicKey);
+        
+        // Add required JWK fields
+        jwk.alg = keyPair.algorithm;
+        jwk.use = 'sig';
+        jwk.kid = keyPair.id;
+        
+        keys.push(jwk);
+      }
+    }
+  } catch (error) {
+    console.warn('[JWKS] Failed to load rotation keys, using static key only:', error);
+  }
+  
+  return { keys };
 }
 
 export async function verifyAccessToken(token: string): Promise<JWTPayload> {
