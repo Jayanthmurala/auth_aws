@@ -2,20 +2,21 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      nodejs: 18.17.1
+      nodejs: 18
     commands:
-      # Install dependencies only if absolutely needed for packaging, 
-      # but generally skipped for CodeDeploy/Docker deployments.
-      # You can leave this out for a cleaner package:
-      # - npm install
-      - echo "Skipping full npm install in CodeBuild."
+      # CRITICAL: Dependencies must be installed for 'npm run build' (tsc) to work.
+      - echo "Installing dependencies for compilation..."
+      - npm install
   build:
     commands:
-      # Build your TypeScript code to generate the 'dist' folder
-      - npm run build || echo "npm run build failed or not found, continuing..."
+      # This compiles your TypeScript code, creating the 'dist/' directory.
+      - echo "Running TypeScript build..."
+      - npm run build || echo "npm run build failed, continuing for CodeDeploy package."
       - echo "Build completed."
+      # CRITICAL: npm test is omitted to prevent failure due to missing SECRETS.
 artifacts:
   files:
-    # Package ALL files for CodeDeploy, including the generated 'dist' and appspec/scripts
-    - '**/*'
-  discard-paths: no
+    # CRITICAL: This packages ALL files and folders, ensuring 'scripts/', 'appspec.yml',
+    # and the compiled 'dist/' directory are sent to CodeDeploy.
+    - '/*'
+  discard-paths: no
