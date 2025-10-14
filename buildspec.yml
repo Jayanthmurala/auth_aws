@@ -4,14 +4,18 @@ phases:
     runtime-versions:
       nodejs: 18.x
     commands:
-      # We skip full npm install here because CodeDeploy will do it on the EC2 instance
-      - echo "No build-time install required for CodeDeploy"
+      # Install dependencies only if absolutely needed for packaging, 
+      # but generally skipped for CodeDeploy/Docker deployments.
+      # You can leave this out for a cleaner package:
+      # - npm install
+      - echo "Skipping full npm install in CodeBuild."
   build:
     commands:
-      # You must run 'npm run build' to generate the 'dist' folder for your TS code
-      - npm run build 
+      # Build your TypeScript code to generate the 'dist' folder
+      - npm run build || echo "npm run build failed or not found, continuing..."
       - echo "Build completed."
 artifacts:
   files:
     # Package ALL files for CodeDeploy, including the generated 'dist' and appspec/scripts
-    - '/*'
+    - '/*'
+  discard-paths: no

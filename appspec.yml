@@ -5,18 +5,12 @@ files:
     destination: /home/ec2-user/app
 hooks:
   BeforeInstall:
+    # Stop the running container before installing new files
     - location: scripts/stop_container.sh
-      timeout: 300
-      runas: ec2-user
-  AfterInstall:
-    - location: scripts/install_dependencies.sh
-      timeout: 300
+      timeout: 60
       runas: ec2-user
   ApplicationStart:
+    # Start the new container using docker compose
     - location: scripts/start_container.sh
-      timeout: 300
-      runas: ec2-user
-  ApplicationStop:
-    - location: scripts/stop_container.sh
       timeout: 300
       runas: ec2-user
