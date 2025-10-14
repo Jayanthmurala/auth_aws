@@ -17,5 +17,5 @@ phases:
 artifacts:
   files:
     # Package ALL files for CodeDeploy, including the generated 'dist' and appspec/scripts
-    - '/*'
+    - '**/*'
   discard-paths: no
