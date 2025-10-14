@@ -2,7 +2,7 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      nodejs: 18.x
+      nodejs: 18.17.1
     commands:
       # Install dependencies only if absolutely needed for packaging, 
       # but generally skipped for CodeDeploy/Docker deployments.
