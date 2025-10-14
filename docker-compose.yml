@@ -1,6 +1,7 @@
 # =============================================================================
-# Docker Compose - Nexus Auth Service (Local Development)
-# Optional: For local testing with containerized dependencies
+# Docker Compose - Nexus Auth Service (Production Deployment)
+# Defines only the 'auth-service'. External dependencies are fetched securely 
+# via the start_container.sh script at runtime.
 # =============================================================================
 
 version: '3.8'
@@ -13,118 +14,29 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: nexus-auth-local
+    container_name: nexus-auth-prod
     ports:
-      - "4001:4001"
+      - "4001:4001" # Host:Container mapping
     environment:
-      - NODE_ENV=development
+      # These are placeholders; they will be overridden by the secure script (start_container.sh)
+      - NODE_ENV=production
       - PORT=4001
-    env_file:
-      - .env
+      # Note: We rely on the start_container.sh script to inject all SECRETS at runtime.
     restart: unless-stopped
-    depends_on:
-      redis-local:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 20s
     networks:
       - nexus-network
-
-  # -----------------------------------------------------------------------------
-  # Redis (Local Development Only)
-  # Use this only if you don't have Redis Cloud configured
-  # -----------------------------------------------------------------------------
-  redis-local:
-    image: redis:7-alpine
-    container_name: nexus-redis-local
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    networks:
-      - nexus-network
-    profiles:
-      - local-redis
-
-  # -----------------------------------------------------------------------------
-  # PostgreSQL (Local Development Only)
-  # Use this only if you don't want to use Neon cloud database
-  # -----------------------------------------------------------------------------
-  postgres-local:
-    image: postgres:15-alpine
-    container_name: nexus-postgres-local
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: nexus_auth
-      POSTGRES_USER: nexus
-      POSTGRES_PASSWORD: nexus_dev_password
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./prisma/migrations:/docker-entrypoint-initdb.d
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexus -d nexus_auth"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    networks:
-      - nexus-network
-    profiles:
-      - local-db
 
 # =============================================================================
-# Networks and Volumes
+# Networks
 # =============================================================================
 networks:
   nexus-network:
     driver: bridge
     name: nexus-network
-
-volumes:
-  redis_data:
-    driver: local
-    name: nexus_redis_data
-  postgres_data:
-    driver: local
-    name: nexus_postgres_data
-
-# =============================================================================
-# Usage Examples:
-#
-# 1. Run with cloud services (Redis Cloud + Neon PostgreSQL):
-#    docker-compose up auth-service
-#
-# 2. Run with local Redis:
-#    docker-compose --profile local-redis up
-#
-# 3. Run with local PostgreSQL:
-#    docker-compose --profile local-db up
-#
-# 4. Run completely local (Redis + PostgreSQL):
-#    docker-compose --profile local-redis --profile local-db up
-#
-# 5. Run in background:
-#    docker-compose up -d
-#
-# 6. View logs:
-#    docker-compose logs -f auth-service
-#
-# 7. Stop and remove:
-#    docker-compose down
-#
-# 8. Stop and remove with volumes:
-#    docker-compose down -v
-# =============================================================================
+# We removed all volumes (postgres_data, redis_data) as local databases are not used.
