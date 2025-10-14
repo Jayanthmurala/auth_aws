@@ -1,11 +1,8 @@
 #!/bin/bash
 # =============================================================================
-# Production Deployment Script for CodeDeploy
-# 1. Ensures we are in the application directory.
-# 2. Builds the Docker image for the 'auth-service'.
-# 3. Stops/removes old containers.
-# 4. Runs the new container using external AWS database/cache endpoints
-#    passed via environment variables (must be present in the EC2 shell).
+# Production Deployment Script for CodeDeploy - SECURE SECRETS RETRIEVAL
+# 1. Retrieves sensitive secrets from AWS Secrets Manager using AWS CLI.
+# 2. Builds and runs the Docker container using those secrets.
 # =============================================================================
 
 set -e # Exit immediately if a command exits with a non-zero status
@@ -17,38 +14,72 @@ APP_PORT=4001
 
 cd $APP_DIR
 
+echo "--- Retrieving production secrets from AWS Secrets Manager ---"
+
+# --- SECRET RETRIEVAL VIA AWS CLI ---
+# Note: The EC2 Instance IAM Role MUST have 'secretsmanager:GetSecretValue' permission.
+# The AWS CLI is assumed to be installed on the EC2 instance.
+
+# Function to securely fetch a secret value
+function get_secret() {
+    SECRET_ID=$1
+    echo "Fetching secret: $SECRET_ID"
+    # The --query SecretString --output text extracts the raw value without quotes or JSON formatting
+    aws secretsmanager get-secret-value \
+        --secret-id "$SECRET_ID" \
+        --query SecretString \
+        --output text
+}
+
+# 1. Retrieve the Database URL
+DB_URL=$(get_secret "prod/auth/database_url")
+if [ -z "$DB_URL" ]; then 
+    echo "ERROR: DATABASE_URL secret could not be retrieved or is empty."
+    exit 1
+fi
+
+# 2. Retrieve the Redis URL
+REDIS_URL=$(get_secret "prod/auth/redis_url")
+if [ -z "$REDIS_URL" ]; then 
+    echo "ERROR: REDIS_URL secret could not be retrieved or is empty."
+    exit 1
+fi
+
+# 3. Retrieve the JWT Private Key
+JWT_PRIVATE_KEY=$(get_secret "prod/auth/jwt_private_key")
+if [ -z "$JWT_PRIVATE_KEY" ]; then 
+    echo "ERROR: JWT_PRIVATE_KEY secret could not be retrieved or is empty."
+    exit 1
+fi
+# --- END OF SECRET RETRIEVAL ---
+
+
 echo "--- 1. Building Docker image for $SERVICE_NAME ---"
-# Use 'docker compose build' to execute the Dockerfile specific to the service
+# Build the image based on the simplified docker-compose.yml
 docker compose build $SERVICE_NAME
 
 echo "--- 2. Stopping and removing old container ($CONTAINER_NAME) ---"
-# Stops and removes the container without relying on the 'up' state.
 docker stop $CONTAINER_NAME || true
 docker rm $CONTAINER_NAME || true
 
-echo "--- 3. Starting new production container with AWS endpoints ---"
+echo "--- 3. Starting new production container with SECURE AWS endpoints ---"
 
-# Retrieve mandatory production environment variables from the EC2 shell environment.
-# Note: These variables (PROD_DB_HOST, etc.) MUST be set manually on the EC2 instance 
-# OR injected via EC2 User Data/AWS Secrets Manager/Parameter Store.
-
-# The following variables MUST be available in the EC2 instance environment:
-# PROD_DB_URL, AUTH_JWT_PRIVATE_KEY, REDIS_URL, etc.
-# For simplicity, we assume the environment variables are already set 
-# in the shell environment where the CodeDeploy agent runs.
-
-# Run the container, injecting necessary environment variables.
-# We are manually injecting the full environment because relying on '.env' 
-# is dangerous for production credentials.
+# Run the container, injecting SECRETS and other variables dynamically.
+# Note: For non-sensitive variables, they are assumed to be available in the EC2 environment 
+# (either via .env packaged with the code, or set globally in the EC2 instance).
 
 docker compose run -d \
     --name $CONTAINER_NAME \
     -p $APP_PORT:$APP_PORT \
     -e NODE_ENV=production \
     -e PORT=$APP_PORT \
-    -e DATABASE_URL="${DATABASE_URL}" \
+    \
+    # SECRETS INJECTED HERE
+    -e DATABASE_URL="${DB_URL}" \
     -e REDIS_URL="${REDIS_URL}" \
-    -e AUTH_JWT_PRIVATE_KEY="${AUTH_JWT_PRIVATE_KEY}" \
+    -e AUTH_JWT_PRIVATE_KEY="${JWT_PRIVATE_KEY}" \
+    \
+    # STATIC/NON-SENSITIVE VARIABLES (Injected from the EC2 shell environment)
     -e AUTH_JWT_PUBLIC_KEY="${AUTH_JWT_PUBLIC_KEY}" \
     -e AUTH_JWT_KID="${AUTH_JWT_KID}" \
     -e AUTH_JWT_ISSUER="${AUTH_JWT_ISSUER}" \
