@@ -4,13 +4,19 @@ files:
   - source: /
     destination: /home/ec2-user/app
 hooks:
+  # CRITICAL FIX: The installation must happen FIRST.
   BeforeInstall:
-    # Stop the running container before installing new files
+    - location: scripts/install_dependencies.sh
+      timeout: 300
+      runas: ec2-user
+      
+  # The stop script runs AFTER installation, ensuring 'docker compose' exists.
+  AfterInstall:
     - location: scripts/stop_container.sh
       timeout: 60
       runas: ec2-user
+
   ApplicationStart:
-    # Start the new container using docker compose
     - location: scripts/start_container.sh
       timeout: 300
       runas: ec2-user
