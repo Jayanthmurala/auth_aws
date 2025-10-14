@@ -1,0 +1,17 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18.x
+    commands:
+      # We skip full npm install here because CodeDeploy will do it on the EC2 instance
+      - echo "No build-time install required for CodeDeploy"
+  build:
+    commands:
+      # You must run 'npm run build' to generate the 'dist' folder for your TS code
+      - npm run build 
+      - echo "Build completed."
+artifacts:
+  files:
+    # Package ALL files for CodeDeploy, including the generated 'dist' and appspec/scripts
+    - '/*'
