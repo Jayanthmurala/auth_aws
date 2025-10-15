@@ -36,22 +36,30 @@ echo "--- Starting prerequisite installation (Docker, Compose, AWS CLI) ---"
 # Update package list
 sudo dnf update -y
 
-# Install Docker
-sudo dnf install -y docker
-
-# Enable and start Docker
-sudo systemctl enable docker
-sudo systemctl start docker
+# Install Docker (if not installed)
+if ! command -v docker &> /dev/null
+then
+    sudo dnf install -y docker
+    sudo systemctl enable docker
+    sudo systemctl start docker
+    echo "Docker installed successfully."
+else
+    echo "Docker is already installed."
+    sudo systemctl enable docker
+    sudo systemctl start docker
+fi
 
 # Add ec2-user to docker group
 sudo usermod -aG docker ec2-user
+echo "Added ec2-user to docker group."
 
-# Install Docker Compose v2 manually (Amazon Linux 2023)
+# Install Docker Compose manually (since docker-compose-plugin not available on Amazon Linux 2023)
 COMPOSE_VERSION=v2.27.0
 sudo mkdir -p /usr/local/lib/docker/cli-plugins
 sudo curl -SL https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-x86_64 \
     -o /usr/local/lib/docker/cli-plugins/docker-compose
 sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+echo "Docker Compose installed successfully."
 
 # Verify installation
 docker compose version
@@ -64,6 +72,8 @@ then
     unzip -q awscliv2.zip
     sudo ./aws/install
     rm -rf aws awscliv2.zip
+else
+    echo "AWS CLI already installed."
 fi
 
 echo "--- Dependencies installed successfully ---"
