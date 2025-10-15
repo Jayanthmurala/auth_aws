@@ -24,7 +24,7 @@ echo "Added ec2-user to docker group. Reboot is usually required, but we will re
 
 # --- 4. Install Docker Compose V2 (CRITICAL for 'docker compose' command) ---
 # Installs it as a plugin, enabling the 'docker compose' syntax
-sudo yum install docker-compose -y
+sudo yum install docker-compose-plugin -y
 
 # --- 5. Install AWS CLI v2 (CRITICAL for secure secret retrieval) ---
 # AWS CLI is required to run 'aws secretsmanager get-secret-value'
