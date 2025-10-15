@@ -52,31 +52,26 @@ docker stop $CONTAINER_NAME || true
 docker rm $CONTAINER_NAME || true
 
 echo "--- 5. Starting new production container with SECURE and STATIC endpoints ---"
-# We inject ALL variables explicitly. Secrets override static variables if they exist in both.
-docker compose run -d \
-    --name $CONTAINER_NAME \
-    -p $APP_PORT:$APP_PORT \
-    \
-    # SECRETS INJECTED HERE (From Secrets Manager)
-    -e DATABASE_URL="${DB_URL}" \
-    -e REDIS_URL="${REDIS_URL}" \
-    -e AUTH_JWT_PRIVATE_KEY="${JWT_PRIVATE_KEY}" \
-    -e AUTH_JWT_PUBLIC_KEY="${JWT_PUBLIC_KEY}" \
-    \
-    # STATIC VARIABLES INJECTED HERE (From .env file via shell expansion)
-    -e NODE_ENV=production \
-    -e PORT=$APP_PORT \
-    -e AUTH_JWT_KID="${AUTH_JWT_KID}" \
-    -e AUTH_JWT_ISSUER="${AUTH_JWT_ISSUER}" \
-    -e AUTH_JWT_AUDIENCE="${AUTH_JWT_AUDIENCE}" \
-    -e AUTH_JWT_ACCESS_EXPIRES_IN="${AUTH_JWT_ACCESS_EXPIRES_IN}" \
-    -e AUTH_JWT_REFRESH_EXPIRES_IN="${AUTH_JWT_REFRESH_EXPIRES_IN}" \
-    -e INTERNAL_API_KEY="${INTERNAL_API_KEY}" \
-    -e INTERNAL_API_SECRET="${INTERNAL_API_SECRET}" \
-    -e CSRF_SECRET="${CSRF_SECRET}" \
-    -e EXPORT_ENCRYPTION_KEY="${EXPORT_ENCRYPTION_KEY}" \
-    -e FRONTEND_URL="${FRONTEND_URL}" \
-    -e FRONTEND_URLS="${FRONTEND_URLS}" \
-    $SERVICE_NAME
+
+# Set all environment variables before running compose up
+export DATABASE_URL="${DB_URL}"
+export REDIS_URL="${REDIS_URL}"
+export AUTH_JWT_PRIVATE_KEY="${JWT_PRIVATE_KEY}"
+export AUTH_JWT_PUBLIC_KEY="${JWT_PUBLIC_KEY}"
+export NODE_ENV=production
+export PORT=$APP_PORT
+export AUTH_JWT_KID="${AUTH_JWT_KID}"
+export AUTH_JWT_ISSUER="${AUTH_JWT_ISSUER}"
+export AUTH_JWT_AUDIENCE="${AUTH_JWT_AUDIENCE}"
+export AUTH_JWT_ACCESS_EXPIRES_IN="${AUTH_JWT_ACCESS_EXPIRES_IN}"
+export AUTH_JWT_REFRESH_EXPIRES_IN="${AUTH_JWT_REFRESH_EXPIRES_IN}"
+export INTERNAL_API_KEY="${INTERNAL_API_KEY}"
+export INTERNAL_API_SECRET="${INTERNAL_API_SECRET}"
+export CSRF_SECRET="${CSRF_SECRET}"
+export EXPORT_ENCRYPTION_KEY="${EXPORT_ENCRYPTION_KEY}"
+export FRONTEND_URL="${FRONTEND_URL}"
+export FRONTEND_URLS="${FRONTEND_URLS}"
+
+docker compose up -d $SERVICE_NAME
 
 echo "Deployment sequence finished."
