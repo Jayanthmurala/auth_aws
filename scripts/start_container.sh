@@ -20,12 +20,6 @@ echo "--- Fixing file permissions for deployment files ---"
 sudo chown -R ec2-user:ec2-user $APP_DIR
 sudo chmod -R 755 $APP_DIR
 
-# --- 1. Load STATIC variables from packaged .env file ---
-# This ensures variables like AUTH_JWT_KID, FRONTEND_URL, etc., are available in the shell
-echo "--- Loading static environment variables from .env ---"
-set -o allexport
-source $APP_DIR/.env
-set +o allexport
 
 # --- 2. Retrieve SENSITIVE Secrets from AWS Secrets Manager ---
 echo "--- Retrieving production secrets from AWS Secrets Manager ---"
