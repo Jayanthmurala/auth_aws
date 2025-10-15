@@ -33,26 +33,40 @@ set -e
 
 echo "--- Starting prerequisite installation (Docker, Compose, AWS CLI) ---"
 
-# Install Docker if not present
+# Update package list
+sudo dnf update -y
+
+# Install Docker
 sudo dnf install -y docker
 
-# Start and enable Docker
-sudo systemctl start docker
+# Enable and start Docker
 sudo systemctl enable docker
+sudo systemctl start docker
 
 # Add ec2-user to docker group
 sudo usermod -aG docker ec2-user
 
-# Install Docker Compose v2 (as plugin)
-DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-mkdir -p $DOCKER_CONFIG/cli-plugins
-sudo curl -SL https://github.com/docker/compose/releases/download/v2.24.1/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+# Install Docker Compose v2 manually (Amazon Linux 2023)
+COMPOSE_VERSION=v2.27.0
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo curl -SL https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-x86_64 \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
 sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 # Verify installation
 docker compose version
 
-echo "--- Docker & Compose installed successfully ---"
+# Install AWS CLI if not installed
+if ! command -v aws &> /dev/null
+then
+    echo "Installing AWS CLI..."
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip -q awscliv2.zip
+    sudo ./aws/install
+    rm -rf aws awscliv2.zip
+fi
+
+echo "--- Dependencies installed successfully ---"
 
 # Note: The 'usermod' command above requires the user to log in again to take effect.
 # In CodeDeploy's sequential script execution, relying on 'newgrp' is risky.
