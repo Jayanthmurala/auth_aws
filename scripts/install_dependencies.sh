@@ -28,9 +28,31 @@ sudo yum install docker-compose-plugin -y
 
 # --- 5. Install AWS CLI v2 (CRITICAL for secure secret retrieval) ---
 # AWS CLI is required to run 'aws secretsmanager get-secret-value'
-sudo yum install awscli -y
+#!/bin/bash
+set -e
 
-echo "--- Prerequisites installation complete. ---"
+echo "--- Starting prerequisite installation (Docker, Compose, AWS CLI) ---"
+
+# Install Docker if not present
+sudo dnf install -y docker
+
+# Start and enable Docker
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Add ec2-user to docker group
+sudo usermod -aG docker ec2-user
+
+# Install Docker Compose v2 (as plugin)
+DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+mkdir -p $DOCKER_CONFIG/cli-plugins
+sudo curl -SL https://github.com/docker/compose/releases/download/v2.24.1/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# Verify installation
+docker compose version
+
+echo "--- Docker & Compose installed successfully ---"
 
 # Note: The 'usermod' command above requires the user to log in again to take effect.
 # In CodeDeploy's sequential script execution, relying on 'newgrp' is risky.
