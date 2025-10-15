@@ -9,14 +9,17 @@ hooks:
     - location: scripts/install_dependencies.sh
       timeout: 300
       runas: ec2-user
+      sudo: true
       
   # The stop script runs AFTER installation, ensuring 'docker compose' exists.
   AfterInstall:
     - location: scripts/stop_container.sh
       timeout: 60
       runas: ec2-user
+      sudo: true
 
   ApplicationStart:
     - location: scripts/start_container.sh
       timeout: 300
-      runas: ec2-user
+      runas: ec2-user
+      sudo: true
