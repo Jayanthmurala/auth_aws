@@ -301,7 +301,10 @@ All errors follow a consistent format with appropriate HTTP status codes.
   });
   await app.register(swaggerUI, { routePrefix: "/docs" });
   app.get("/.well-known/jwks.json", async () => await getJWKS());
-
+  app.get("/", (request, reply) => {
+    reply.send("Welcome to Nexus Auth Service");
+  });
+  
   // Initialize instance registry for load balancing
   await InstanceRegistry.initialize(app);
 
