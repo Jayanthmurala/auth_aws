@@ -483,33 +483,36 @@ export class SSOService {
       where: { email: profile.email }
     });
 
-    if (!user && provider.config.autoProvision) {
-      // Auto-provision new user
-      user = await prisma.user.create({
-        data: {
-          email: profile.email,
-          displayName: profile.displayName || profile.email,
-          roles: (provider.config.defaultRoles || ['STUDENT']) as Role[],
-          status: 'ACTIVE',
-          // Additional fields based on profile
-          ...(profile.department && { department: profile.department })
-        }
-      });
-
-      // Audit log user auto-provisioning
-      AuditLogger.logSystem('sso_user_auto_provisioned', `/sso/${provider.id}/provision`, {
+    // SECURITY: Auto-provisioning disabled for security reasons
+    // Users must be created by administrators only
+    if (!user) {
+      // Log the attempt for security monitoring
+      AuditLogger.logSystem('sso_user_not_found', `/sso/${provider.id}/login`, {
         details: { 
-          userId: user.id, 
-          email: user.email, 
+          email: profile.email.substring(0, 3) + '***', // Partial email for privacy
+          providerId: provider.id,
+          reason: 'User not found in database - auto-provisioning disabled'
+        },
+        risk: 'medium',
+        category: 'auth'
+      });
+      
+      throw new Error('User not found. Contact your administrator to create an account.');
+    }
+
+    // Verify user is active
+    if (user.status !== 'ACTIVE' || user.deletedAt) {
+      AuditLogger.logSystem('sso_inactive_user_attempt', `/sso/${provider.id}/login`, {
+        details: { 
+          userId: user.id,
+          status: user.status,
           providerId: provider.id 
         },
         risk: 'medium',
         category: 'auth'
       });
-    }
-
-    if (!user) {
-      throw new Error('User not found and auto-provisioning is disabled');
+      
+      throw new Error('Account is not active. Contact your administrator.');
     }
 
     return user;

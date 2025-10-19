@@ -12,7 +12,7 @@ import { InputSanitizers, createXSSValidator } from "../middleware/inputSanitiza
 import { validatePassword, DEFAULT_PASSWORD_POLICY, getPasswordStrengthText } from "../utils/passwordValidation.js";
 import { findUserByEmail, withPerformanceMonitoring } from "../utils/queryOptimization.js";
 import { CacheConfigs } from "../middleware/responseCaching.js";
-import { authSuccessResponseSchema, loginBodySchema, errorResponseSchema, oauthExchangeBodySchema, forgotPasswordBodySchema, resetPasswordBodySchema, verifyEmailBodySchema, resendVerificationBodySchema, messageResponseSchema, registerBodySchema } from "../schemas/auth.schemas.js";
+import { authSuccessResponseSchema, loginBodySchema, errorResponseSchema, authErrorResponseSchema, oauthExchangeBodySchema, forgotPasswordBodySchema, resetPasswordBodySchema, verifyEmailBodySchema, resendVerificationBodySchema, messageResponseSchema, registerBodySchema } from "../schemas/auth.schemas.js";
 import { ProfileInitializationService } from "../services/ProfileInitializationService.js";
 import { authenticateUser, authenticateApiKey } from "../middleware/authMiddleware.js";
 import { sendPasswordResetEmail, sendVerificationEmail } from "../emails/simple-mailer.js";
@@ -453,7 +453,7 @@ async function authRoutes(app: FastifyInstance) {
     schema: {
       tags: ["auth"],
       body: oauthExchangeBodySchema,
-      response: { 200: authSuccessResponseSchema, 400: errorResponseSchema },
+      response: { 200: authSuccessResponseSchema, 400: errorResponseSchema, 403: authErrorResponseSchema },
     },
   }, async (req, reply) => {
     const { provider, accessToken: providerToken } = req.body as z.infer<typeof oauthExchangeBodySchema>;
@@ -467,19 +467,50 @@ async function authRoutes(app: FastifyInstance) {
       return reply.code(400).send({ message: "Invalid provider token or email not available" });
     }
 
-    // Find or create user by email
-    let user = await prisma.user.findUnique({ where: { email: profile.email } });
+    // Find existing user by email - DO NOT CREATE NEW USERS
+    let user = await prisma.user.findUnique({ 
+      where: { email: profile.email },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        avatarUrl: true,
+        roles: true,
+        status: true,
+        collegeId: true,
+        department: true,
+        year: true,
+        tokenVersion: true,
+        deletedAt: true
+      }
+    });
+    
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          email: profile.email,
-          passwordHash: null,
-          displayName: profile.name || profile.email.split("@")[0],
-          avatarUrl: profile.avatarUrl ?? null,
-          roles: ["STUDENT"],
-          status: "ACTIVE",
-          preferences: { create: {} },
-        },
+      // User doesn't exist - reject OAuth login
+      Logger.security('OAuth login attempt for non-existing user', {
+        severity: 'medium',
+        event: 'oauth_user_not_found',
+        email: profile.email.substring(0, 3) + '***', // Partial email for logging
+        provider
+      });
+      return reply.code(403).send({ 
+        message: "Account not found. Contact your administrator to create an account.",
+        code: "ACCOUNT_NOT_FOUND"
+      });
+    }
+
+    // Check if user account is active
+    if (user.status !== "ACTIVE" || user.deletedAt) {
+      Logger.security('OAuth login attempt for inactive user', {
+        severity: 'medium',
+        event: 'oauth_inactive_user',
+        userId: user.id,
+        status: user.status,
+        provider
+      });
+      return reply.code(403).send({ 
+        message: "Account is not active. Contact your administrator.",
+        code: "ACCOUNT_INACTIVE"
       });
     }
 
@@ -518,6 +549,9 @@ async function authRoutes(app: FastifyInstance) {
         displayName: user.displayName,
         roles: user.roles,
         avatarUrl: user.avatarUrl ?? null,
+        collegeId: user.collegeId ?? null,
+        department: user.department ?? null,
+        year: user.year ?? null,
       },
     });
   });

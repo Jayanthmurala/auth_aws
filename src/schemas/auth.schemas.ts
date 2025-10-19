@@ -62,6 +62,12 @@ export const errorResponseSchema = z.object({
   message: z.string(),
 });
 
+// Enhanced error payload with error codes for OAuth and auth failures
+export const authErrorResponseSchema = z.object({
+  message: z.string(),
+  code: z.string().optional(),
+});
+
 // Generic message payload used by 2xx responses
 export const messageResponseSchema = z.object({
   message: z.string(),
@@ -70,6 +76,7 @@ export const messageResponseSchema = z.object({
 });
 
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
+export type AuthErrorResponse = z.infer<typeof authErrorResponseSchema>;
 
 export type RegisterBody = z.infer<typeof registerBodySchema>;
 export type LoginBody = z.infer<typeof loginBodySchema>;
