@@ -2,14 +2,15 @@ import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { Role, UserStatus } from "@prisma/client";
+import { env } from "../config/env.js";
+import { Role, UserStatus, Prisma } from "@prisma/client";
 import { authenticateUser, optionalAuth } from "../middleware/authMiddleware.js";
-import { 
-  errorResponseSchema, 
-  userUpdateBodySchema, 
-  userSearchQuerySchema, 
+import {
+  errorResponseSchema,
+  userUpdateBodySchema,
+  userSearchQuerySchema,
   userBatchBodySchema,
-  UserUpdateBody 
+  UserUpdateBody
 } from "../schemas/auth.schemas.js";
 import { RateLimiters } from "../middleware/rateLimitMiddleware.js";
 import * as userService from "../services/user.service.js";
@@ -29,7 +30,7 @@ function sanitizeInput(input: string): string {
 function enforcePaginationLimits(limit?: string, offset?: string) {
   const parsedLimit = parseInt(limit || '20');
   const parsedOffset = parseInt(offset || '0');
-  
+
   return {
     limit: Math.min(Math.max(parsedLimit, 1), 50), // Min 1, Max 50
     offset: Math.max(parsedOffset, 0) // Min 0
@@ -108,13 +109,13 @@ async function logUserAudit(
 async function getCachedResponse(key: string): Promise<any | null> {
   try {
     if (!redis) return null;
-    
+
     const cached = await redis.get(key);
     if (cached) {
       console.log(`[CACHE] Hit for key: ${key}`);
       return JSON.parse(cached);
     }
-    
+
     console.log(`[CACHE] Miss for key: ${key}`);
     return null;
   } catch (error) {
@@ -126,7 +127,7 @@ async function getCachedResponse(key: string): Promise<any | null> {
 async function setCachedResponse(key: string, data: any, ttlSeconds: number = 300): Promise<void> {
   try {
     if (!redis) return;
-    
+
     await redis.setex(key, ttlSeconds, JSON.stringify(data));
     console.log(`[CACHE] Set key: ${key} (TTL: ${ttlSeconds}s)`);
   } catch (error) {
@@ -145,18 +146,18 @@ function generateCacheKey(prefix: string, params: Record<string, any>): string {
 async function invalidateUserCaches(userId?: string, collegeId?: string): Promise<void> {
   try {
     if (!redis) return;
-    
+
     // Invalidate search caches that might contain this user
     const patterns = [
       'users:search:*',
       'users:college:*',
       'users:discovery:*'
     ];
-    
+
     if (collegeId) {
       patterns.push(`users:college:*collegeId:${collegeId}*`);
     }
-    
+
     for (const pattern of patterns) {
       const keys = await redis.keys(pattern);
       if (keys.length > 0) {
@@ -179,32 +180,88 @@ const usersQuerySchema = z.object({
 async function usersRoutes(app: FastifyInstance) {
   const f = app.withTypeProvider<ZodTypeProvider>();
 
-  // Public: List users directory with optional filters
+  // Protected: List users directory with optional filters (REQUIRES AUTHENTICATION)
   f.get("/v1/users", {
-    preHandler: [RateLimiters.general],
+    preHandler: [authenticateUser, RateLimiters.general],
     schema: {
       tags: ["users"],
+      security: [{ bearerAuth: [] }],
       querystring: usersQuerySchema,
-      response: { 200: z.any() },
+      response: { 200: z.any(), 401: errorResponseSchema },
     },
   }, async (req, reply) => {
     const { limit, offset, q, role } = req.query as z.infer<typeof usersQuerySchema>;
-    
+
     // SECURITY: Enforce pagination limits
     const { limit: safeLimit, offset: safeOffset } = enforcePaginationLimits(limit, offset);
-    
+
+    // CRITICAL FIX: Add college scoping to prevent cross-college user discovery
     const where: any = {
       status: UserStatus.ACTIVE,
-      roles: { hasSome: [Role.STUDENT, Role.FACULTY] }
+      roles: { hasSome: [Role.STUDENT, Role.FACULTY] },
+      collegeId: req.user?.collegeId  // ← CRITICAL: Only show users from same college
     };
+
+    // CRITICAL FIX: Add department scoping for DEPT_ADMIN to prevent cross-department discovery
+    if (req.user?.roles.includes('DEPT_ADMIN')) {
+      where.department = req.user.department;
+    }
+
     if (q) {
+      // PHASE 2: Use full-text search with PostgreSQL tsvector for better performance
       // SECURITY: Sanitize search input to prevent injection attacks
       const sanitizedQuery = sanitizeInput(q);
       if (sanitizedQuery.length > 0) {
-        where.OR = [
-          { displayName: { contains: sanitizedQuery, mode: "insensitive" } },
-          { email: { contains: sanitizedQuery, mode: "insensitive" } },
-        ];
+        // Use raw query for full-text search with ranking
+        // This is much faster than LIKE queries on large datasets
+        const searchResults = await prisma.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "User"
+          WHERE "searchVector" @@ plainto_tsquery('english', ${sanitizedQuery})
+          AND "collegeId" = ${req.user?.collegeId}
+          ${req.user?.roles.includes('DEPT_ADMIN') ? Prisma.sql`AND "department" = ${req.user.department}` : Prisma.empty}
+          AND "status" = ${UserStatus.ACTIVE}
+          AND "roles" && ARRAY['STUDENT', 'FACULTY']::text[]
+          ORDER BY ts_rank("searchVector", plainto_tsquery('english', ${sanitizedQuery})) DESC
+          LIMIT ${safeLimit}
+          OFFSET ${safeOffset}
+        `;
+        
+        // Extract user IDs from search results
+        const searchUserIds = searchResults.map((r) => r.id);
+        
+        if (searchUserIds.length === 0) {
+          return reply.send({ users: [] });
+        }
+        
+        // Fetch full user details
+        const users = await prisma.user.findMany({
+          where: {
+            id: { in: searchUserIds }
+          },
+          select: {
+            id: true,
+            displayName: true,
+            avatarUrl: true,
+            roles: true,
+            collegeId: true,
+            department: true,
+            year: true,
+            createdAt: true
+          }
+        });
+
+        const safeUsers = users.map(user => ({
+          id: user.id,
+          displayName: user.displayName,
+          avatarUrl: user.avatarUrl,
+          roles: user.roles.filter(role => ['STUDENT', 'FACULTY'].includes(role)),
+          collegeId: user.collegeId,
+          department: user.department,
+          year: user.year,
+          createdAt: user.createdAt,
+        }));
+
+        return reply.send({ users: safeUsers });
       }
     }
     if (role) {
@@ -243,7 +300,7 @@ async function usersRoutes(app: FastifyInstance) {
     },
   }, async (req, reply) => {
     const { userId } = req.params as { userId: string };
-    
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -275,29 +332,29 @@ async function usersRoutes(app: FastifyInstance) {
       tags: ["users"],
       params: z.object({ userId: z.string().cuid() }),
       body: userUpdateBodySchema,
-      response: { 
-        200: z.object({ success: z.boolean(), user: z.any() }), 
+      response: {
+        200: z.object({ success: z.boolean(), user: z.any() }),
         400: errorResponseSchema,
         403: errorResponseSchema,
-        404: errorResponseSchema 
+        404: errorResponseSchema
       },
     },
   }, async (req, reply) => {
     const { userId } = req.params as { userId: string };
     const { displayName, avatarUrl, collegeId, department, year } = req.body as UserUpdateBody;
-    
+
     // CRITICAL SECURITY: Verify ownership or admin privileges
     const currentUser = (req as any).user;
     if (!currentUser) {
       return sendErrorResponse(reply, 401, "Authentication required");
     }
-    
+
     // Only allow users to update their own profile, or admins to update any profile
     const isOwner = currentUser.id === userId;
-    const isAdmin = currentUser.roles.some((role: string) => 
+    const isAdmin = currentUser.roles.some((role: string) =>
       ['HEAD_ADMIN', 'DEPT_ADMIN', 'SUPER_ADMIN'].includes(role)
     );
-    
+
     if (!isOwner && !isAdmin) {
       return sendErrorResponse(reply, 403, "You can only update your own profile", {
         userId,
@@ -305,7 +362,7 @@ async function usersRoutes(app: FastifyInstance) {
         userRoles: currentUser.roles
       });
     }
-    
+
     const user = await userService.findUserById(userId);
     if (!user) {
       return sendErrorResponse(reply, 404, "User not found", { userId });
@@ -321,7 +378,7 @@ async function usersRoutes(app: FastifyInstance) {
 
     try {
       const updatedUser = await userService.updateUserProfile(userId, updateData);
-      
+
       // P1: Audit log user profile update
       await logUserAudit(
         currentUser.id,
@@ -346,9 +403,9 @@ async function usersRoutes(app: FastifyInstance) {
       // P1: Invalidate relevant caches
       await invalidateUserCaches(userId, updateData.collegeId || user.collegeId);
 
-      return reply.send({ 
+      return reply.send({
         success: true,
-        user: updatedUser 
+        user: updatedUser
       });
     } catch (error) {
       // P1: Audit log failed update
@@ -365,7 +422,7 @@ async function usersRoutes(app: FastifyInstance) {
       if (error instanceof Error) {
         return sendErrorResponse(reply, 400, error.message, { updateData });
       }
-      
+
       return sendErrorResponse(reply, 500, 'Failed to update user profile');
     }
   });
@@ -376,9 +433,9 @@ async function usersRoutes(app: FastifyInstance) {
     schema: {
       tags: ["users"],
       body: userBatchBodySchema,
-      response: { 
-        200: z.object({ success: z.boolean(), data: z.any() }), 
-        400: errorResponseSchema 
+      response: {
+        200: z.object({ success: z.boolean(), data: z.any() }),
+        400: errorResponseSchema
       }
     }
   }, async (request: any, reply: any) => {
@@ -392,11 +449,20 @@ async function usersRoutes(app: FastifyInstance) {
         });
       }
 
+      // CRITICAL FIX: Add college and department scoping to prevent cross-college/department data breach
+      const where: any = {
+        id: { in: userIds },
+        status: UserStatus.ACTIVE,
+        collegeId: request.user?.collegeId  // ← CRITICAL: Only show users from same college
+      };
+
+      // For DEPT_ADMIN, further restrict to their department
+      if (request.user?.roles.includes('DEPT_ADMIN')) {
+        where.department = request.user.department;
+      }
+
       const users = await prisma.user.findMany({
-        where: {
-          id: { in: userIds },
-          status: UserStatus.ACTIVE
-        },
+        where,
         select: {
           id: true,
           email: true,
@@ -433,11 +499,12 @@ async function usersRoutes(app: FastifyInstance) {
     }
   });
 
-  // GET /v1/users/search - Search users with filters
+  // Protected: Search users with filters (REQUIRES AUTHENTICATION)
   f.get('/v1/users/search', {
-    preHandler: [RateLimiters.general],
+    preHandler: [authenticateUser, RateLimiters.general],
     schema: {
       tags: ["users"],
+      security: [{ bearerAuth: [] }],
       querystring: z.object({
         q: z.string().optional(),
         role: z.string().optional(),
@@ -446,7 +513,7 @@ async function usersRoutes(app: FastifyInstance) {
         limit: z.string().optional(),
         offset: z.string().optional()
       }),
-      response: { 200: z.any(), 500: errorResponseSchema }
+      response: { 200: z.any(), 401: errorResponseSchema, 500: errorResponseSchema }
     }
   }, async (request: any, reply: any) => {
     try {
@@ -559,11 +626,12 @@ async function usersRoutes(app: FastifyInstance) {
     }
   });
 
-  // GET /v1/users/college/:collegeId - Get users by college
+  // Protected: Get users by college (REQUIRES AUTHENTICATION)
   f.get('/v1/users/college/:collegeId', {
-    preHandler: [optionalAuth, RateLimiters.general],
+    preHandler: [authenticateUser, RateLimiters.general],
     schema: {
       tags: ["users"],
+      security: [{ bearerAuth: [] }],
       params: z.object({
         collegeId: z.string().cuid()
       }),
@@ -573,7 +641,7 @@ async function usersRoutes(app: FastifyInstance) {
         limit: z.string().optional(),
         offset: z.string().optional()
       }),
-      response: { 200: z.any(), 500: errorResponseSchema }
+      response: { 200: z.any(), 401: errorResponseSchema, 500: errorResponseSchema }
     }
   }, async (request: any, reply: any) => {
     try {
@@ -587,6 +655,18 @@ async function usersRoutes(app: FastifyInstance) {
 
       // SECURITY: Enforce pagination limits
       const { limit: safeLimit, offset: safeOffset } = enforcePaginationLimits(limit, offset);
+
+      // MEDIUM PRIORITY: Add caching for college user list
+      const { RedisManager } = await import('../config/redis.js');
+      const redis = RedisManager.getInstance();
+      const cacheKey = `users:college:${collegeId}:${department || 'all'}:${role || 'all'}:${safeLimit}:${safeOffset}`;
+
+      if (!env.REDIS_DISABLED) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          return reply.send(JSON.parse(cached));
+        }
+      }
 
       const where: any = {
         collegeId,
@@ -634,7 +714,7 @@ async function usersRoutes(app: FastifyInstance) {
         ]
       });
 
-      return reply.send({
+      const response = {
         success: true,
         data: {
           users,
@@ -645,7 +725,14 @@ async function usersRoutes(app: FastifyInstance) {
             total: users.length
           }
         }
-      });
+      };
+
+      if (!env.REDIS_DISABLED) {
+        // Cache for 5 minutes
+        await redis.setex(cacheKey, 300, JSON.stringify(response));
+      }
+
+      return reply.send(response);
     } catch (error) {
       console.error('College users fetch error:', error);
       return reply.code(500).send({
@@ -849,7 +936,7 @@ async function usersRoutes(app: FastifyInstance) {
 // Utility function to shuffle array with optional seed
 function shuffleArray<T>(array: T[], seed?: number): T[] {
   const shuffled = [...array];
-  
+
   if (seed !== undefined) {
     // Seeded random shuffle for consistent results
     let currentSeed = seed;
@@ -865,7 +952,7 @@ function shuffleArray<T>(array: T[], seed?: number): T[] {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
   }
-  
+
   return shuffled;
 }
 

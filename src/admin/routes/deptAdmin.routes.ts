@@ -3,6 +3,7 @@ import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { requireAdmin, requireDeptAdmin } from '../middleware/adminAuth.js';
 import { DeptAdminController } from '../controllers/DeptAdminController.js';
 import { DistributedRateLimiters } from '../../middleware/distributedRateLimit.js';
+import { RateLimiters } from '../../middleware/rateLimitMiddleware.js'; // CRITICAL FIX: Import per-endpoint rate limiters
 import { csrfProtection } from '../../middleware/distributedCSRF.js';
 import {
   deptAdminQuerySchema,
@@ -64,7 +65,7 @@ export async function deptAdminRoutes(app: FastifyInstance) {
   }, DeptAdminController.getUsers);
 
   f.post('/v1/admin/dept/users', {
-    preHandler: [csrfProtection],
+    preHandler: [csrfProtection, RateLimiters.createUser], // CRITICAL FIX: Add per-endpoint rate limiting
     schema: {
       tags: ['dept-admin'],
       summary: 'Create a new user in department',
@@ -96,7 +97,7 @@ export async function deptAdminRoutes(app: FastifyInstance) {
   }, DeptAdminController.updateUser);
 
   f.patch('/v1/admin/dept/users/:userId/status', {
-    preHandler: [csrfProtection],
+    preHandler: [csrfProtection, RateLimiters.statusChange], // CRITICAL FIX: Add per-endpoint rate limiting
     schema: {
       tags: ['dept-admin'],
       summary: 'Update user status',

@@ -1,33 +1,78 @@
 import { prisma } from '../db.js';
+import { env } from '../config/env.js';
+import { createHmac } from 'crypto';
 
 interface User {
   id: string;
   email: string;
   displayName: string;
-  roles: string[];
   avatarUrl?: string | null;
   collegeId?: string | null;
   department?: string | null;
   year?: number | null;
-  collegeMemberId?: string | null;
 }
 
 export class ProfileInitializationService {
-  private static readonly PROFILE_SERVICE_URL = process.env.PROFILE_SERVICE_URL || 'http://localhost:4003';
+  private static readonly PROFILE_SERVICE_URL = process.env.PROFILE_SERVICE_URL || 'http://localhost:4002';
   private static readonly MAX_RETRIES = 3;
-  private static readonly RETRY_DELAY = 2000; // 2 seconds
+  private static readonly RETRY_DELAY_MS = 1000; // 1 second between retries
+  private static readonly PROFILE_CHECK_TIMEOUT_MS = 5000; // 5 seconds to check if profile exists
+  private static readonly PROFILE_CREATION_TIMEOUT_MS = 5000; // 5 seconds timeout for profile creation during login
+
+  /**
+   * Synchronously initialize user profile during login
+   * This BLOCKS login until profile is created or timeout is reached
+   * Maximum wait time: 5 seconds
+   * If profile creation fails, login still succeeds (graceful degradation)
+   */
+  static async initializeUserProfileSync(user: User): Promise<void> {
+    try {
+      console.log(`[ProfileInit] Starting synchronous profile creation for user ${user.id}`);
+      
+      // Create profile with timeout
+      await this.withTimeout(
+        this.createUserProfileWithRetry(user),
+        this.PROFILE_CREATION_TIMEOUT_MS,
+        `Profile creation for user ${user.id}`
+      );
+      
+      console.log(`[ProfileInit] Profile created successfully for user ${user.id}`);
+    } catch (error) {
+      // Log the error but don't throw - login should still succeed
+      console.warn(`[ProfileInit] Profile creation failed during login (non-blocking):`, 
+        error instanceof Error ? error.message : String(error));
+      // Profile will be created asynchronously in background
+      this.createUserProfileWithRetry(user).catch(bgError => {
+        console.warn(`[ProfileInit] Background profile creation also failed:`, 
+          bgError instanceof Error ? bgError.message : String(bgError));
+      });
+    }
+  }
 
   /**
    * Asynchronously initialize user profile in profile-service
    * This runs in the background and doesn't block the login process
+   * Profile initialization is optional - login succeeds even if it fails
    */
   static async initializeUserProfileAsync(user: User): Promise<void> {
     // Don't await - run in background
     this.createUserProfileWithRetry(user).catch(error => {
-      console.error(`[ProfileInit] Failed to initialize profile for user ${user.id}:`, error);
-      // Store failed initialization for later retry
-      this.storePendingProfileInit(user.id);
+      console.warn(`[ProfileInit] Profile initialization failed (non-blocking):`, error instanceof Error ? error.message : String(error));
+      // Don't store pending init - profile service will be updated separately
+      // For now, just log and continue - login already succeeded
     });
+  }
+
+  /**
+   * Helper: Execute promise with timeout
+   */
+  private static withTimeout<T>(promise: Promise<T>, timeoutMs: number, operationName: string): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`${operationName} timed out after ${timeoutMs}ms`)), timeoutMs)
+      )
+    ]);
   }
 
   /**
@@ -56,7 +101,7 @@ export class ProfileInitializationService {
       
       if (attempt < this.MAX_RETRIES) {
         // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * attempt));
+        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY_MS * attempt));
         return this.createUserProfileWithRetry(user, attempt + 1);
       } else {
         // All retries failed
@@ -85,27 +130,24 @@ export class ProfileInitializationService {
   }
 
   /**
-   * Create user profile in profile-service
+   * Create user profile in profile-service via HTTP API
    */
   private static async createProfile(user: User): Promise<void> {
+    // Only include fields that profile service expects
     const profileData = {
       userId: user.id,
-      email: user.email,
-      displayName: user.displayName,
-      avatar: user.avatarUrl || null,
-      bio: null,
+      collegeId: user.collegeId || undefined,
+      department: user.department || undefined,
+      year: user.year || undefined,
+      bio: "",
       skills: [],
-      expertise: [],
-      year: user.year || null,
-      collegeMemberId: user.collegeMemberId || null,
-      contactInfo: null,
-      linkedIn: null,
-      github: null,
-      resumeUrl: null,
-      twitter: null,
-      collegeId: user.collegeId || null,
-      department: user.department || null,
+      resumeUrl: "",
+      linkedIn: "",
+      github: "",
     };
+
+    // Profile endpoint is now public - no authentication needed
+    console.log(`[ProfileInit] Creating profile for user ${profileData.userId}`);
 
     const response = await fetch(`${this.PROFILE_SERVICE_URL}/v1/profiles`, {
       method: 'POST',
@@ -121,20 +163,30 @@ export class ProfileInitializationService {
     }
   }
 
+
   /**
    * Store pending profile initialization for later retry
+   * Uses Prisma client for better error handling
    */
   private static async storePendingProfileInit(userId: string): Promise<void> {
     try {
-      // Store in a simple table for tracking failed profile initializations
-      await prisma.$executeRaw`
-        INSERT INTO "PendingProfileInit" ("userId", "createdAt", "retryCount")
-        VALUES (${userId}, NOW(), 1)
-        ON CONFLICT ("userId") 
-        DO UPDATE SET "retryCount" = "PendingProfileInit"."retryCount" + 1, "updatedAt" = NOW()
-      `;
-    } catch (error) {
-      console.error(`[ProfileInit] Failed to store pending profile init:`, error);
+      // Try to store in database table using Prisma
+      await prisma.pendingProfileInit.upsert({
+        where: { userId },
+        update: { 
+          retryCount: { increment: 1 },
+          updatedAt: new Date()
+        },
+        create: {
+          userId,
+          retryCount: 1
+        }
+      });
+    } catch (dbError) {
+      // If table doesn't exist, log but don't fail
+      console.warn(`[ProfileInit] Database table not available, skipping pending profile storage:`, 
+        dbError instanceof Error ? dbError.message : String(dbError));
+      // In production, could use Redis as fallback here
     }
   }
 
@@ -143,9 +195,15 @@ export class ProfileInitializationService {
    */
   private static async removePendingProfileInit(userId: string): Promise<void> {
     try {
-      await prisma.$executeRaw`DELETE FROM "PendingProfileInit" WHERE "userId" = ${userId}`;
+      // Use Prisma client instead of raw SQL to avoid table existence issues
+      await prisma.pendingProfileInit.delete({
+        where: { userId }
+      }).catch(() => {
+        // Silently ignore if record doesn't exist
+      });
     } catch (error) {
-      console.error(`[ProfileInit] Failed to remove pending profile init:`, error);
+      // Silently ignore - table might not exist or record might not exist
+      // This is non-critical cleanup
     }
   }
 
@@ -154,12 +212,13 @@ export class ProfileInitializationService {
    */
   static async retryPendingProfileInits(): Promise<void> {
     try {
-      const pendingInits = await prisma.$queryRaw<Array<{userId: string, retryCount: number}>>`
-        SELECT "userId", "retryCount" 
-        FROM "PendingProfileInit" 
-        WHERE "retryCount" < ${this.MAX_RETRIES}
-        AND "updatedAt" < NOW() - INTERVAL '5 minutes'
-      `;
+      // Use Prisma client to query pending inits
+      const pendingInits = await prisma.pendingProfileInit.findMany({
+        where: {
+          retryCount: { lt: this.MAX_RETRIES },
+          updatedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } // 5 minutes ago
+        }
+      });
 
       for (const pending of pendingInits) {
         const user = await prisma.user.findUnique({
@@ -183,7 +242,9 @@ export class ProfileInitializationService {
         }
       }
     } catch (error) {
-      console.error(`[ProfileInit] Error retrying pending profile inits:`, error);
+      // Table might not exist - log but don't fail
+      console.warn(`[ProfileInit] Error retrying pending profile inits (table may not exist):`, 
+        error instanceof Error ? error.message : String(error));
     }
   }
 }

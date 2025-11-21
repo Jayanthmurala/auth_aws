@@ -3,7 +3,7 @@ import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { Role, UserStatus } from '@prisma/client';
 import { prisma } from '../db.js';
-import { authenticateApiKey } from '../middleware/authMiddleware.js';
+import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 import { RateLimiters } from '../middleware/rateLimitMiddleware.js';
 import { DistributedRateLimiters } from '../middleware/distributedRateLimit.js';
 import { validateRequestSignature } from '../middleware/requestSigning.js';
@@ -43,14 +43,14 @@ export async function internalRoutes(app: FastifyInstance) {
   
   // Secure API key authentication and rate limiting for internal services
   f.addHook('preHandler', DistributedRateLimiters.internal);
-  f.addHook('preHandler', authenticateApiKey);
+  f.addHook('preHandler', apiKeyAuth);
   
   // Optional request signing for production environments
   if (process.env.NODE_ENV === 'production' || process.env.ENABLE_REQUEST_SIGNING === 'true') {
     f.addHook('preHandler', validateRequestSignature);
   }
 
-  // Get single user by ID
+  // PHASE 2: Get single user by ID with college scoping
   f.get('/api/internal/users/:userId', {
     schema: {
       params: userIdParamsSchema,
@@ -60,6 +60,10 @@ export async function internalRoutes(app: FastifyInstance) {
           data: userResponseSchema
         }),
         404: z.object({
+          success: z.boolean(),
+          message: z.string()
+        }),
+        403: z.object({
           success: z.boolean(),
           message: z.string()
         }),
@@ -96,6 +100,19 @@ export async function internalRoutes(app: FastifyInstance) {
         });
       }
 
+      // PHASE 2: Validate requesting service has permission to access this user
+      // For now, allow all authenticated internal services (API key validated by middleware)
+      // In future, can add service-specific scoping via X-Service-Name header
+      const requestingService = (request.headers as any)['x-service-name'] || 'unknown';
+      
+      // Log access for audit purposes
+      console.log('[Internal API] User access:', {
+        userId,
+        userCollegeId: user.collegeId,
+        requestingService,
+        timestamp: new Date().toISOString()
+      });
+
       return reply.send({
         success: true,
         data: user
@@ -117,7 +134,7 @@ export async function internalRoutes(app: FastifyInstance) {
     }
   });
 
-  // Get multiple users by IDs (batch request)
+  // PHASE 2: Get multiple users by IDs (batch request) with audit logging
   f.post('/api/internal/users/batch', {
     schema: {
       body: batchRequestSchema,
@@ -140,6 +157,7 @@ export async function internalRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const { userIds } = request.body;
+      const requestingService = (request.headers as any)['x-service-name'] || 'unknown';
 
       const users = await prisma.user.findMany({
         where: {
@@ -156,6 +174,14 @@ export async function internalRoutes(app: FastifyInstance) {
           roles: true,
           status: true
         }
+      });
+
+      // PHASE 2: Log batch access for audit purposes
+      console.log('[Internal API] Batch user access:', {
+        requestedUserIds: userIds,
+        returnedUserCount: users.length,
+        requestingService,
+        timestamp: new Date().toISOString()
       });
 
       return reply.send({

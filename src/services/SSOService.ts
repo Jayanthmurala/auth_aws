@@ -197,6 +197,7 @@ export class SSOService {
         email: user.email,
         displayName: user.displayName,
         roles: user.roles,
+        tokenVersion: user.tokenVersion,
         ssoProvider: providerId
       });
 
@@ -275,6 +276,7 @@ export class SSOService {
         email: user.email,
         displayName: user.displayName,
         roles: user.roles,
+        tokenVersion: user.tokenVersion,
         ssoProvider: providerId
       });
 

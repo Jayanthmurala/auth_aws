@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAdmin, requireHeadAdmin } from '../middleware/adminAuth.js';
 import { HeadAdminController } from '../controllers/HeadAdminController.js';
 import { DistributedRateLimiters } from '../../middleware/distributedRateLimit.js';
+import { RateLimiters } from '../../middleware/rateLimitMiddleware.js'; // CRITICAL FIX: Import per-endpoint rate limiters
 import { csrfProtection } from '../../middleware/distributedCSRF.js';
 import {
   createUserSchema,
@@ -78,8 +79,23 @@ export async function headAdminRoutes(app: FastifyInstance) {
     }
   }, HeadAdminController.getUsers);
 
+  // Get individual user
+  f.get('/v1/admin/head/users/:userId', {
+    schema: {
+      tags: ['head-admin'],
+      summary: 'Get user by ID',
+      description: 'Retrieve a specific user by their ID',
+      params: userParamsSchema,
+      response: {
+        200: userResponseSchema,
+        404: errorResponseSchema,
+        500: errorResponseSchema
+      }
+    }
+  }, HeadAdminController.getUser);
+
   f.post('/v1/admin/head/users', {
-    preHandler: [csrfProtection],
+    preHandler: [csrfProtection, RateLimiters.createUser], // CRITICAL FIX: Add per-endpoint rate limiting
     schema: {
       tags: ['head-admin'],
       summary: 'Create a new user',
@@ -111,7 +127,7 @@ export async function headAdminRoutes(app: FastifyInstance) {
   }, HeadAdminController.updateUser);
 
   f.delete('/v1/admin/head/users/:userId', {
-    preHandler: [csrfProtection],
+    preHandler: [csrfProtection, RateLimiters.deleteUser], // CRITICAL FIX: Add per-endpoint rate limiting
     schema: {
       tags: ['head-admin'],
       summary: 'Delete a user (soft delete)',
@@ -132,7 +148,7 @@ export async function headAdminRoutes(app: FastifyInstance) {
   }, HeadAdminController.deleteUser);
 
   f.post('/v1/admin/head/users/bulk', {
-    preHandler: [csrfProtection],
+    preHandler: [csrfProtection, RateLimiters.bulkUserOps], // CRITICAL FIX: Add per-endpoint rate limiting
     schema: {
       tags: ['head-admin'],
       summary: 'Bulk user operations',
@@ -224,11 +240,8 @@ export async function headAdminRoutes(app: FastifyInstance) {
       tags: ['head-admin'],
       summary: 'Export data',
       description: 'Export various data types (users, analytics, audit logs) in CSV format',
-      querystring: exportQuerySchema,
-      response: {
-        200: { type: 'string', description: 'CSV file content' },
-        400: errorResponseSchema
-      }
+      querystring: exportQuerySchema
+      // Note: No response schema validation for file downloads (can be CSV string or binary data)
     }
   }, HeadAdminController.exportData);
 }

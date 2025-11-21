@@ -8,8 +8,14 @@ export const analyticsQuerySchema = z.object({
 });
 
 export const auditLogsQuerySchema = z.object({
-  page: z.string().optional().transform(val => parseInt(val || '1')).pipe(z.number().int().min(1)),
-  limit: z.string().optional().transform(val => parseInt(val || '50')).pipe(z.number().int().min(1).max(100)),
+  page: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.max(1, val);
+    return Math.max(1, parseInt(val || '1'));
+  }),
+  limit: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.min(100, Math.max(1, val));
+    return Math.min(100, Math.max(1, parseInt(val || '50')));
+  }),
   sortBy: z.enum(['createdAt', 'action', 'adminId']).optional().default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
   adminId: z.string().cuid().optional(),
@@ -23,13 +29,22 @@ export const auditLogsQuerySchema = z.object({
 export const exportQuerySchema = z.object({
   type: z.enum(['users', 'departments', 'activity', 'audit']),
   format: z.enum(['csv', 'excel']).optional().default('csv'),
+  encrypted: z.union([z.string(), z.boolean()]).optional().transform(val => {
+    if (typeof val === 'boolean') return val;
+    return val === 'false' ? false : true; // Default to encrypted for security
+  }),
   department: z.string().optional(), // Filter by department
   role: z.enum(['STUDENT', 'FACULTY', 'DEPT_ADMIN', 'PLACEMENTS_ADMIN', 'HEAD_ADMIN']).optional(), // Filter by role
   readiness: z.enum(['ready', 'not-ready', 'all']).optional(), // For placements admin
   // Additional filters for dept admin
   roles: z.string().optional(), // Comma-separated roles for dept admin
   status: z.string().optional(), // Comma-separated statuses for dept admin
-  search: z.string().optional() // Search query for dept admin
+  search: z.string().optional(), // Search query for dept admin
+  year: z.string().optional(), // Year filter
+  hasNeverLoggedIn: z.union([z.string(), z.boolean()]).optional().transform(val => {
+    if (typeof val === 'boolean') return val;
+    return val === 'true' ? true : val === 'false' ? false : undefined;
+  }) // Login status filter
 });
 
 // Analytics response schemas

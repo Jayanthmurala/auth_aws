@@ -488,25 +488,83 @@ export class AdminAnalyticsService {
     collegeId: string,
     type: 'users' | 'departments' | 'activity',
     department?: string,
-    role?: string
+    role?: string,
+    filters?: {
+      roles?: string;
+      status?: string;
+      search?: string;
+      year?: string;
+      hasNeverLoggedIn?: boolean;
+    }
   ): Promise<string> {
     let data: any[] = [];
     let headers: string[] = [];
 
     switch (type) {
       case 'users':
-        // Build scope with optional department and role filtering
+        // Build scope with comprehensive filtering
         const scope: any = { 
-          collegeId, 
-          status: { not: 'DELETED' as UserStatus } 
+          collegeId
         };
         
+        // Handle status filtering (including DELETED if specified)
+        if (filters?.status) {
+          const statusArray = filters.status.split(',').map(s => s.trim());
+          if (statusArray.length === 1) {
+            scope.status = statusArray[0];
+          } else {
+            scope.status = { in: statusArray };
+          }
+        } else {
+          scope.status = { not: 'DELETED' as UserStatus }; // Default: exclude deleted
+        }
+        
+        // Handle department filtering
         if (department) {
           scope.department = department;
         }
         
+        // Handle role filtering (single role from dropdown)
         if (role) {
           scope.roles = { has: role };
+        }
+        
+        // Handle roles filtering (comma-separated from filters)
+        if (filters?.roles) {
+          const rolesArray = filters.roles.split(',').map(r => r.trim());
+          if (rolesArray.length === 1) {
+            scope.roles = { has: rolesArray[0] };
+          } else {
+            scope.roles = { hasSome: rolesArray };
+          }
+        }
+        
+        // Handle year filtering
+        if (filters?.year) {
+          const yearArray = filters.year.split(',').map(y => parseInt(y.trim())).filter(y => !isNaN(y));
+          if (yearArray.length === 1) {
+            scope.year = yearArray[0];
+          } else if (yearArray.length > 1) {
+            scope.year = { in: yearArray };
+          }
+        }
+        
+        // Handle search filtering
+        if (filters?.search) {
+          scope.OR = [
+            { displayName: { contains: filters.search, mode: 'insensitive' } },
+            { email: { contains: filters.search, mode: 'insensitive' } },
+            { collegeMemberId: { contains: filters.search, mode: 'insensitive' } }
+          ];
+        }
+        
+        // Handle login status filtering
+        if (filters?.hasNeverLoggedIn !== undefined) {
+          if (filters.hasNeverLoggedIn) {
+            scope.lastLoginAt = null;
+          } else {
+            scope.lastLoginAt = { not: null };
+          }
         }
 
         const users = await prisma.user.findMany({

@@ -42,34 +42,22 @@ export default async function securityRoutes(app: FastifyInstance) {
       tags: ['security'],
       summary: 'Generate CSRF token',
       description: 'Generate a CSRF token for the current session',
-      security: [{ bearerAuth: [] }],
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            data: {
-              type: 'object',
-              properties: {
-                token: { type: 'string' },
-                expiresIn: { type: 'number' },
-                headerName: { type: 'string' }
-              }
-            }
-          }
-        }
-      }
+      security: [{ bearerAuth: [] }]
+      // Note: No response schema validation to avoid ZodTypeProvider conflicts
     }
   }, async (request, reply) => {
     // Get session ID from authenticated user or IP
     const sessionId = (request as any).user?.id || request.ip;
     const token = await generateCSRFToken(sessionId);
     
-    return reply.sendSuccess({
-      token,
-      expiresIn: 30 * 60, // 30 minutes
-      headerName: 'X-CSRF-Token'
-    }, 'CSRF token generated');
+    return reply.send({
+      success: true,
+      data: {
+        token,
+        expiresIn: 30 * 60, // 30 minutes
+        headerName: 'X-CSRF-Token'
+      }
+    });
   });
 
   /**
@@ -129,7 +117,10 @@ export default async function securityRoutes(app: FastifyInstance) {
       category: 'security'
     });
     
-    return reply.sendSuccess(stats, 'Security statistics retrieved');
+    return reply.send({
+      success: true,
+      data: stats
+    });
   });
 
   /**
@@ -175,10 +166,13 @@ export default async function securityRoutes(app: FastifyInstance) {
       category: 'security'
     });
     
-    return reply.sendSuccess({
-      ip,
-      unblocked: true
-    }, `IP ${ip} has been unblocked`);
+    return reply.send({
+      success: true,
+      data: {
+        ip,
+        unblocked: true
+      }
+    });
   });
 
   /**
@@ -323,7 +317,10 @@ export default async function securityRoutes(app: FastifyInstance) {
       }
     };
     
-    return reply.sendSuccess(config, 'Security configuration retrieved');
+    return reply.send({
+      success: true,
+      data: config
+    });
   });
 
   /**
@@ -464,6 +461,9 @@ export default async function securityRoutes(app: FastifyInstance) {
       category: 'security'
     });
     
-    return reply.sendSuccess(stats, 'Audit statistics retrieved');
+    return reply.send({
+      success: true,
+      data: stats
+    });
   });
 }

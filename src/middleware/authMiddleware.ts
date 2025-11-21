@@ -31,6 +31,31 @@ function extractBearerToken(request: FastifyRequest): string | null {
 }
 
 /**
+ * CRITICAL FIX: Get client IP address handling proxies and load balancers
+ * Supports X-Forwarded-For, X-Real-IP, and direct connection
+ */
+function getClientIp(request: FastifyRequest): string {
+  // Check X-Forwarded-For header (most common for proxies/load balancers)
+  const xForwardedFor = request.headers['x-forwarded-for'];
+  if (xForwardedFor) {
+    // X-Forwarded-For can contain multiple IPs, take the first one (client IP)
+    const ips = Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor;
+    const clientIp = ips.split(',')[0].trim();
+    if (clientIp) return clientIp;
+  }
+
+  // Check X-Real-IP header (used by some proxies)
+  const xRealIp = request.headers['x-real-ip'];
+  if (xRealIp) {
+    const clientIp = Array.isArray(xRealIp) ? xRealIp[0] : xRealIp;
+    if (clientIp) return clientIp;
+  }
+
+  // Fallback to request.ip (direct connection or Fastify's trustProxy setting)
+  return request.ip || '0.0.0.0';
+}
+
+/**
  * Authentication middleware - verifies JWT and populates req.user
  */
 export async function authenticateUser(
@@ -97,6 +122,86 @@ export async function authenticateUser(
           code: 'AUTH_USER_INACTIVE'
         }
       });
+    }
+
+    // CRITICAL FIX: Validate IP for admin sessions (with proxy/load balancer support)
+    const ADMIN_ROLES = ['HEAD_ADMIN', 'DEPT_ADMIN', 'PLACEMENTS_ADMIN', 'SUPER_ADMIN'];
+    const isAdmin = user.roles.some(role => ADMIN_ROLES.includes(role));
+
+    if (isAdmin && (payload as any).ip) {
+      // CRITICAL FIX: Use proper IP extraction that handles proxies/load balancers
+      const currentIp = getClientIp(request);
+      const tokenIp = (payload as any).ip;
+
+      // Only validate IP if it's not a private/loopback address (allows load balancer IPs to vary)
+      const isPrivateIp = (ip: string) => {
+        return /^(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|::1|fc|fd)/.test(ip);
+      };
+
+      // If token IP is from a private network, skip strict validation (load balancer scenario)
+      // Otherwise, enforce IP matching for security
+      if (!isPrivateIp(tokenIp) && tokenIp !== currentIp) {
+        // Import Logger dynamically to avoid circular dependencies if any
+        const { Logger } = await import('../utils/logger.js');
+        Logger.security('Admin session IP mismatch detected', {
+          severity: 'high',
+          event: 'admin_ip_mismatch',
+          userId: user.id,
+          tokenIp,
+          requestIp: currentIp
+        });
+
+        return reply.code(401).send({
+          success: false,
+          error: {
+            message: 'Session invalid: IP address changed',
+            code: 'AUTH_IP_MISMATCH'
+          }
+        });
+      }
+    }
+
+    // HIGH SECURITY: Enforce 5-minute idle timeout for admins
+    if (isAdmin) {
+      // Import dependencies dynamically
+      const { RedisManager } = await import('../config/redis.js');
+      const { env } = await import('../config/env.js');
+
+      if (!env.REDIS_DISABLED) {
+        try {
+          const redis = RedisManager.getInstance();
+          const lastActiveKey = `admin:last_active:${user.id}`;
+          const lastActive = await redis.get(lastActiveKey);
+
+          if (lastActive) {
+            const lastActiveTime = parseInt(lastActive);
+            const now = Date.now();
+            // 5 minutes idle timeout
+            if (now - lastActiveTime > 5 * 60 * 1000) {
+              const { Logger } = await import('../utils/logger.js');
+              Logger.security('Admin session expired due to inactivity', {
+                severity: 'medium',
+                event: 'admin_idle_timeout',
+                userId: user.id
+              });
+
+              return reply.code(401).send({
+                success: false,
+                error: {
+                  message: 'Session expired due to inactivity. Please log in again.',
+                  code: 'AUTH_SESSION_EXPIRED'
+                }
+              });
+            }
+          }
+
+          // Update last active time (set expiry to 15m to match token)
+          await redis.setex(lastActiveKey, 15 * 60, Date.now().toString());
+        } catch (error) {
+          // Fail open if Redis fails, but log it
+          console.error('Redis session check failed:', error);
+        }
+      }
     }
 
     // Populate request.user
@@ -182,7 +287,7 @@ export async function optionalAuth(
  * Role-based authorization middleware
  */
 export function requireRoles(allowedRoles: Role[]) {
-  return async function(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  return async function (request: FastifyRequest, reply: FastifyReply): Promise<void> {
     if (!request.user) {
       return reply.code(401).send({
         success: false,
@@ -209,6 +314,12 @@ export function requireRoles(allowedRoles: Role[]) {
 }
 
 /**
+ * @deprecated Use apiKeyAuth from apiKeyAuth.ts instead
+ * This function uses static API key comparison without rotation support.
+ * The new implementation supports automatic key rotation and is more secure.
+ * 
+ * Migration: Replace with `import { apiKeyAuth } from '../middleware/apiKeyAuth.js'`
+ * 
  * API Key authentication for internal/cron endpoints
  */
 export async function authenticateApiKey(

@@ -13,6 +13,11 @@ import {
   PaginationParams
 } from '../types/adminTypes.js';
 import { getDepartmentScopedWhere } from '../middleware/collegeScope.js';
+import { 
+  sanitizeStringInput, // CRITICAL FIX: Add input sanitization
+  sanitizeEmailInput,
+  sanitizeCodeInput
+} from '../utils/inputValidation.js';
 
 // P1: Standardized error response utility
 function createStandardErrorResponse(
@@ -160,6 +165,14 @@ export class DeptAdminController {
     
     try {
       const userData = request.body as CreateUserRequest;
+
+      // CRITICAL FIX: Sanitize all string inputs to prevent injection attacks
+      if (userData.email) {
+        userData.email = sanitizeEmailInput(userData.email);
+      }
+      if (userData.displayName) {
+        userData.displayName = sanitizeStringInput(userData.displayName, 100);
+      }
 
       // Ensure DEPT_ADMIN can only create STUDENT or FACULTY
       if (!['STUDENT', 'FACULTY'].includes(userData.roles[0])) {

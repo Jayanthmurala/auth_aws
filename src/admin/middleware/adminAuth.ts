@@ -134,6 +134,8 @@ export async function requireHeadAdmin(request: FastifyRequest, reply: FastifyRe
 
 /**
  * DEPT_ADMIN specific middleware
+ * CRITICAL FIX: Only DEPT_ADMIN and SUPER_ADMIN can access DEPT_ADMIN endpoints
+ * HEAD_ADMIN should use HEAD_ADMIN endpoints instead
  */
 export async function requireDeptAdmin(request: FastifyRequest, reply: FastifyReply) {
   const adminRequest = request as AdminRequest;
@@ -146,13 +148,13 @@ export async function requireDeptAdmin(request: FastifyRequest, reply: FastifyRe
   }
 
   const hasDeptAdminRole = adminRequest.admin.roles.some(role => 
-    ['DEPT_ADMIN', 'HEAD_ADMIN', 'SUPER_ADMIN'].includes(role)
+    ['DEPT_ADMIN', 'SUPER_ADMIN'].includes(role) // CRITICAL FIX: Removed HEAD_ADMIN
   );
 
   if (!hasDeptAdminRole) {
     return reply.status(403).send({
       success: false,
-      message: 'DEPT_ADMIN, HEAD_ADMIN, or SUPER_ADMIN role required'
+      message: 'DEPT_ADMIN or SUPER_ADMIN role required'
     });
   }
 
@@ -162,6 +164,114 @@ export async function requireDeptAdmin(request: FastifyRequest, reply: FastifyRe
       success: false,
       message: 'Department assignment required for DEPT_ADMIN'
     });
+  }
+
+  // PHASE 2: Enhanced comprehensive department scope validation
+  // Check multiple sources: URL params, query, body, and resource ownership
+  if (adminRequest.admin.roles.includes('DEPT_ADMIN' as Role)) {
+    // Extract department from multiple sources
+    const requestDept = 
+      (request.params as any)?.department ||
+      (request.query as any)?.department ||
+      (request.body as any)?.department;
+    
+    // Validate department matches admin's department
+    if (requestDept && requestDept !== adminRequest.admin.department) {
+      return reply.status(403).send({
+        success: false,
+        message: 'Cannot access other departments'
+      });
+    }
+
+    // PHASE 2: Validate resource ownership for single user operations
+    if ((request.params as any)?.userId) {
+      try {
+        const targetUser = await prisma.user.findUnique({
+          where: { id: (request.params as any).userId },
+          select: { department: true, collegeId: true, roles: true }
+        });
+        
+        if (!targetUser) {
+          return reply.status(404).send({
+            success: false,
+            message: 'User not found'
+          });
+        }
+
+        // Verify user is in admin's department
+        if (targetUser.department !== adminRequest.admin.department) {
+          return reply.status(403).send({
+            success: false,
+            message: 'User not in your department'
+          });
+        }
+
+        // Verify admin cannot manage other admins
+        const hasAdminRole = targetUser.roles.some(role => 
+          ['HEAD_ADMIN', 'DEPT_ADMIN', 'PLACEMENTS_ADMIN', 'SUPER_ADMIN'].includes(role)
+        );
+        if (hasAdminRole) {
+          return reply.status(403).send({
+            success: false,
+            message: 'Cannot manage admin users'
+          });
+        }
+      } catch (error) {
+        console.error('[DEPT_ADMIN_AUTH] Error validating resource ownership:', error);
+        return reply.status(500).send({
+          success: false,
+          message: 'Internal server error'
+        });
+      }
+    }
+
+    // PHASE 2: Validate bulk operations - check all user IDs in request
+    if ((request.body as any)?.userIds && Array.isArray((request.body as any).userIds)) {
+      try {
+        const userIds = (request.body as any).userIds;
+        
+        // Fetch all target users
+        const targetUsers = await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, department: true, roles: true }
+        });
+
+        // Verify all users are in admin's department
+        for (const user of targetUsers) {
+          if (user.department !== adminRequest.admin.department) {
+            return reply.status(403).send({
+              success: false,
+              message: `User ${user.id} is not in your department`
+            });
+          }
+
+          // Verify admin cannot manage other admins
+          const hasAdminRole = user.roles.some(role => 
+            ['HEAD_ADMIN', 'DEPT_ADMIN', 'PLACEMENTS_ADMIN', 'SUPER_ADMIN'].includes(role)
+          );
+          if (hasAdminRole) {
+            return reply.status(403).send({
+              success: false,
+              message: `Cannot manage admin user ${user.id}`
+            });
+          }
+        }
+
+        // Verify all requested users were found
+        if (targetUsers.length !== userIds.length) {
+          return reply.status(404).send({
+            success: false,
+            message: 'One or more users not found'
+          });
+        }
+      } catch (error) {
+        console.error('[DEPT_ADMIN_AUTH] Error validating bulk operation:', error);
+        return reply.status(500).send({
+          success: false,
+          message: 'Internal server error'
+        });
+      }
+    }
   }
 }
 

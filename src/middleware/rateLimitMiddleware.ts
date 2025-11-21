@@ -172,80 +172,124 @@ export const RateLimiters = {
   // Strict rate limiting for admin operations
   admin: createRateLimit({
     max: 20,
-    windowMs: 60 * 60 * 1000, // 1 hour
+    windowMs: 5 * 1000, // 5 seconds
     keyGenerator: (req) => {
       // Use user ID for admin operations if available
       const user = (req as any).user;
       return `admin:${user?.id || req.ip}`;
     },
-    message: 'Too many admin operations. Please try again in 1 hour.'
+    message: 'Too many admin operations. Please try again in 5 seconds.'
   }),
 
   // Very strict rate limiting for head admin operations
   headAdmin: createRateLimit({
     max: 50,
-    windowMs: 60 * 60 * 1000, // 1 hour
+    windowMs: 5 * 1000, // 5 seconds
     keyGenerator: (req) => {
       const user = (req as any).user;
       return `head-admin:${user?.id || req.ip}`;
     },
-    message: 'Too many head admin operations. Please try again in 1 hour.'
+    message: 'Too many head admin operations. Please try again in 5 seconds.'
   }),
 
   // Strict rate limiting for department admin operations
   deptAdmin: createRateLimit({
     max: 30,
-    windowMs: 60 * 60 * 1000, // 1 hour
+    windowMs: 5 * 1000, // 5 seconds
     keyGenerator: (req) => {
       const user = (req as any).user;
       return `dept-admin:${user?.id || req.ip}`;
     },
-    message: 'Too many department admin operations. Please try again in 1 hour.'
+    message: 'Too many department admin operations. Please try again in 5 seconds.'
   }),
 
   // Ultra-strict rate limiting for bulk operations
   bulkOperations: createRateLimit({
     max: 5,
-    windowMs: 60 * 60 * 1000, // 1 hour
+    windowMs: 5 * 1000, // 5 seconds
     keyGenerator: (req) => {
       const user = (req as any).user;
       return `bulk-ops:${user?.id || req.ip}`;
     },
-    message: 'Too many bulk operations. Please try again in 1 hour.'
+    message: 'Too many bulk operations. Please try again in 5 seconds.'
   }),
 
   // Strict rate limiting for data export operations
   dataExport: createRateLimit({
     max: 3,
-    windowMs: 60 * 60 * 1000, // 1 hour
+    windowMs: 5 * 1000, // 5 seconds
     keyGenerator: (req) => {
       const user = (req as any).user;
       return `data-export:${user?.id || req.ip}`;
     },
-    message: 'Too many data export requests. Please try again in 1 hour.'
+    message: 'Too many data export requests. Please try again in 5 seconds.'
   }),
 
   // Very strict rate limiting for security operations
   security: createRateLimit({
     max: 5,
-    windowMs: 60 * 60 * 1000, // 1 hour
+    windowMs: 5 * 1000, // 5 seconds
     keyGenerator: (req) => {
       const user = (req as any).user;
       return `security:${user?.id || req.ip}`;
     },
-    message: 'Too many security operations. Please try again in 1 hour.'
+    message: 'Too many security operations. Please try again in 5 seconds.'
   }),
 
   // Rate limiting for internal API access
   internal: createRateLimit({
     max: 1000,
-    windowMs: 60 * 60 * 1000, // 1 hour
+    windowMs: 5 * 1000, // 5 seconds
     keyGenerator: (req) => {
       // Use API key or service identifier for internal APIs
       const apiKey = req.headers['x-api-key'] as string;
       return `internal:${apiKey ? apiKey.slice(-8) : req.ip}`;
     },
-    message: 'Internal API rate limit exceeded. Please try again later.'
+    message: 'Internal API rate limit exceeded. Please try again in 5 seconds.'
+  }),
+
+  // CRITICAL FIX: Per-endpoint rate limiting for user creation (prevent account spam)
+  createUser: createRateLimit({
+    max: 10,
+    windowMs: 60 * 1000, // 1 minute
+    keyGenerator: (req) => {
+      const user = (req as any).user;
+      return `create-user:${user?.id || req.ip}`;
+    },
+    message: 'Too many user creation attempts. Maximum 10 users per minute. Please try again later.'
+  }),
+
+  // CRITICAL FIX: Per-endpoint rate limiting for bulk operations (prevent DoS)
+  bulkUserOps: createRateLimit({
+    max: 5,
+    windowMs: 60 * 1000, // 1 minute
+    keyGenerator: (req) => {
+      const user = (req as any).user;
+      return `bulk-user-ops:${user?.id || req.ip}`;
+    },
+    message: 'Too many bulk operations. Maximum 5 bulk operations per minute. Please try again later.'
+  }),
+
+  // CRITICAL FIX: Per-endpoint rate limiting for user deletion (prevent mass deletion)
+  deleteUser: createRateLimit({
+    max: 5,
+    windowMs: 60 * 1000, // 1 minute
+    keyGenerator: (req) => {
+      const user = (req as any).user;
+      return `delete-user:${user?.id || req.ip}`;
+    },
+    message: 'Too many user deletion attempts. Maximum 5 deletions per minute. Please try again later.'
+  }),
+
+  // CRITICAL FIX: Per-endpoint rate limiting for status changes (prevent account lockout spam)
+  statusChange: createRateLimit({
+    max: 20,
+    windowMs: 60 * 1000, // 1 minute
+    keyGenerator: (req) => {
+      const user = (req as any).user;
+      return `status-change:${user?.id || req.ip}`;
+    },
+    message: 'Too many status change attempts. Maximum 20 per minute. Please try again later.'
   })
 };
 

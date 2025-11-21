@@ -18,6 +18,7 @@ import { getJWKS } from "./utils/jwt.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { responseWrapperPlugin, responseFormatMiddleware } from "./middleware/responseWrapper.js";
 import { monitoringMiddleware } from "./middleware/monitoring.js";
+import { InputSanitizers, createXSSValidator } from "./middleware/inputSanitization.js";
 import { CacheMiddlewares, CacheWarmer, cacheInvalidationMiddleware } from "./middleware/caching.js";
 import { securityHeadersMiddleware } from "./middleware/advancedSecurity.js";
 import { auditLoggingMiddleware } from "./middleware/auditLogger.js";
@@ -65,10 +66,27 @@ async function buildServer() {
   });
 
   // CORS configuration using environment variables
+  const allowedOrigins = env.FRONTEND_URLS.split(',').map(url => url.trim());
+  console.log('🌐 [CORS] Allowed origins:', allowedOrigins);
+
   await app.register(cors, {
-    origin: env.FRONTEND_URLS.split(',').map(url => url.trim()),
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        console.log('✅ [CORS] Origin allowed:', origin);
+        return callback(null, true);
+      }
+
+      console.warn('❌ [CORS] Origin blocked:', origin);
+      return callback(new Error(`CORS policy violation: Origin ${origin} not allowed`), false);
+    },
     credentials: true,
-    allowedHeaders: ["Authorization", "Content-Type"],
+    allowedHeaders: ["Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    preflightContinue: false,
+    optionsSuccessStatus: 200
   });
 
   await app.register(cookie);
@@ -87,6 +105,10 @@ async function buildServer() {
 
   // Additional security headers
   app.addHook('onRequest', securityHeadersMiddleware);
+
+  // MEDIUM PRIORITY: Global input sanitization
+  // Sanitize all incoming requests to prevent XSS/Injection
+  app.addHook('preHandler', InputSanitizers.moderate);
 
   // Audit logging middleware
   app.addHook('onRequest', auditLoggingMiddleware({
@@ -115,7 +137,7 @@ async function buildServer() {
   await app.register(swagger, {
     openapi: {
       openapi: '3.0.3',
-      info: { 
+      info: {
         title: "Nexus Auth Service API",
         version: "0.1.0",
         description: `
@@ -160,7 +182,7 @@ All errors follow a consistent format with appropriate HTTP status codes.
         }
       },
       servers: [
-        { 
+        {
           url: `http://localhost:${env.PORT}`,
           description: "Development server"
         },
@@ -260,32 +282,32 @@ All errors follow a consistent format with appropriate HTTP status codes.
       },
       security: [{ bearerAuth: [] }],
       tags: [
-        { 
-          name: "auth", 
+        {
+          name: "auth",
           description: "Authentication and authorization endpoints",
           externalDocs: {
             description: "Authentication Guide",
             url: "https://docs.nexus.edu/auth"
           }
         },
-        { 
-          name: "colleges", 
-          description: "College management endpoints" 
+        {
+          name: "colleges",
+          description: "College management endpoints"
         },
-        { 
-          name: "head-admin", 
-          description: "HEAD_ADMIN management endpoints - highest level administration" 
+        {
+          name: "head-admin",
+          description: "HEAD_ADMIN management endpoints - highest level administration"
         },
-        { 
-          name: "dept-admin", 
-          description: "DEPT_ADMIN management endpoints - department level administration" 
+        {
+          name: "dept-admin",
+          description: "DEPT_ADMIN management endpoints - department level administration"
         },
-        { 
-          name: "placements-admin", 
-          description: "PLACEMENTS_ADMIN management endpoints - placement coordination" 
+        {
+          name: "placements-admin",
+          description: "PLACEMENTS_ADMIN management endpoints - placement coordination"
         },
-        { 
-          name: "monitoring", 
+        {
+          name: "monitoring",
           description: "Health checks, metrics, and monitoring endpoints",
           externalDocs: {
             description: "Monitoring Guide",
@@ -304,7 +326,7 @@ All errors follow a consistent format with appropriate HTTP status codes.
   app.get("/", (request, reply) => {
     reply.send("Welcome to Nexus Auth Service");
   });
-  
+
   // Initialize instance registry for load balancing
   await InstanceRegistry.initialize(app);
 
@@ -313,6 +335,9 @@ All errors follow a consistent format with appropriate HTTP status codes.
   await app.register(authRoutes);
   await app.register(usersRoutes);
   await app.register(collegeRoutes);
+  await app.register(adminRoutes); // Register admin routes (HEAD_ADMIN, DEPT_ADMIN, PLACEMENTS_ADMIN)
+  await app.register(internalRoutes); // Register internal service routes
+  await app.register(monitoringRoutes); // Register monitoring routes
   await app.register(securityRoutes);
   await app.register(keyManagementRoutes);
   await app.register(mfaRoutes);
@@ -351,10 +376,10 @@ buildServer()
     // Graceful shutdown handling
     const gracefulShutdown = (signal: string) => {
       Logger.info(`Received ${signal}, shutting down gracefully...`, { operation: 'shutdown', signal });
-      
+
       // Shutdown JWT Key Rotation Service
       JWTKeyRotationService.shutdown();
-      
+
       app.close(() => {
         Logger.info('Auth service shutdown complete', { operation: 'shutdown' });
         process.exit(0);
@@ -367,15 +392,15 @@ buildServer()
     return app.listen({ port: env.PORT, host: "0.0.0.0" });
   })
   .then((address) => {
-    Logger.info(`Auth service listening at ${address}`, { 
-      operation: 'startup', 
-      address, 
-      port: env.PORT,
-      nodeEnv: env.NODE_ENV 
-    });
-    Logger.info('JWT Key Rotation Service initialized with weekly rotation', { 
+    Logger.info(`Auth service listening at ${address}`, {
       operation: 'startup',
-      service: 'jwt_key_rotation' 
+      address,
+      port: env.PORT,
+      nodeEnv: env.NODE_ENV
+    });
+    Logger.info('JWT Key Rotation Service initialized with weekly rotation', {
+      operation: 'startup',
+      service: 'jwt_key_rotation'
     });
   })
   .catch((err) => {

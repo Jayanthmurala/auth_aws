@@ -45,7 +45,7 @@ export const authUserSchema = z.object({
   email: z.string().email(),
   displayName: z.string(),
   roles: z.array(allRolesEnum),
-  avatarUrl: z.string().url().nullable().optional(),
+  avatarUrl: z.string().nullable().optional(),
   collegeId: z.string().nullable().optional(),
   department: z.string().nullable().optional(),
   year: z.number().int().nullable().optional(),
@@ -53,8 +53,11 @@ export const authUserSchema = z.object({
 });
 
 export const authSuccessResponseSchema = z.object({
-  accessToken: z.string(),
-  user: authUserSchema,
+  success: z.boolean(),
+  data: z.object({
+    accessToken: z.string(),
+    user: authUserSchema,
+  }),
 });
 
 // Generic error payload used by 4xx responses

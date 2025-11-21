@@ -131,12 +131,14 @@ export const userFiltersQuerySchema = z.object({
 });
 
 export const paginationQuerySchema = z.object({
-  page: z.string().optional().transform(val => {
+  page: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.max(1, Math.min(val, 1000));
     const num = parseInt(val || '1');
     return isNaN(num) || num < 1 ? 1 : Math.min(num, 1000); // Max 1000 pages
   }),
   
-  limit: z.string().optional().transform(val => {
+  limit: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.max(1, Math.min(val, 100));
     const num = parseInt(val || '50');
     return isNaN(num) || num < 1 ? 50 : Math.min(num, 100); // Max 100 items per page
   }),
@@ -320,4 +322,74 @@ export function parseAndValidateQuery<T>(
       } 
     };
   }
+}
+
+/**
+ * CRITICAL FIX: Sanitize string inputs for admin operations
+ * Prevents SQL injection, XSS, and other injection attacks
+ */
+export function sanitizeStringInput(input: string, maxLength: number = 255): string {
+  if (!input || typeof input !== 'string') return '';
+  
+  // Remove HTML/script tags
+  let sanitized = input.replace(/<[^>]*>/g, '');
+  
+  // Remove dangerous characters that could be used in SQL injection
+  sanitized = sanitized.replace(/[;'"\\]/g, '');
+  
+  // Remove control characters
+  sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
+  
+  // Trim whitespace and limit length
+  sanitized = sanitized.trim().substring(0, maxLength);
+  
+  return sanitized;
+}
+
+/**
+ * CRITICAL FIX: Sanitize email input
+ */
+export function sanitizeEmailInput(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+  
+  // Basic email sanitization - remove dangerous characters but keep valid email chars
+  const sanitized = input
+    .toLowerCase()
+    .replace(/[<>\"'\\;]/g, '')
+    .trim()
+    .substring(0, 254); // RFC 5321
+  
+  return sanitized;
+}
+
+/**
+ * CRITICAL FIX: Validate and sanitize collegeId/department codes
+ */
+export function sanitizeCodeInput(input: string, maxLength: number = 50): string {
+  if (!input || typeof input !== 'string') return '';
+  
+  // Only allow alphanumeric, hyphens, and underscores
+  const sanitized = input
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .trim()
+    .substring(0, maxLength);
+  
+  return sanitized;
+}
+
+/**
+ * CRITICAL FIX: Sanitize numeric inputs
+ */
+export function sanitizeNumberInput(input: any, min: number = 0, max: number = 999): number {
+  const num = parseInt(String(input));
+  if (isNaN(num)) return min;
+  return Math.max(min, Math.min(num, max));
+}
+
+/**
+ * CRITICAL FIX: Sanitize array inputs
+ */
+export function sanitizeArrayInput(input: any[], maxLength: number = 100): any[] {
+  if (!Array.isArray(input)) return [];
+  return input.slice(0, maxLength).filter(item => item !== null && item !== undefined);
 }

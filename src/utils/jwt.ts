@@ -102,51 +102,70 @@ export async function generateAccessToken(payload: { sub: string; email: string;
   return signAccessToken(payload.sub, { email: payload.email, roles: payload.roles });
 }
 
-export async function signAccessToken(subject: string, claims: Record<string, any>): Promise<string> {
+export async function signAccessToken(subject: string, claims: Record<string, any>, options?: { ip?: string }): Promise<string> {
   Logger.debug('Creating JWT token', { subject, operation: 'jwt_create' });
-  
+
   try {
+    // HIGH SECURITY: Enforce 15m timeout for admins
+    const ADMIN_ROLES = ['HEAD_ADMIN', 'DEPT_ADMIN', 'PLACEMENTS_ADMIN', 'SUPER_ADMIN'];
+    const userRoles = (claims.roles as string[]) || [];
+    const isAdmin = userRoles.some(role => ADMIN_ROLES.includes(role));
+
+    // Use 15m for admins, or env setting for others (default 15m anyway, but explicit here)
+    const expiresIn = isAdmin ? '15m' : env.AUTH_JWT_ACCESS_EXPIRES_IN;
+
     // Try to get current signing key from rotation service
     const signingKey = await JWTKeyRotationService.getCurrentSigningKey();
     const key = await importPKCS8(signingKey.privateKey, signingKey.algorithm as any);
-    
-    const jwt = await new SignJWT({ ...claims })
+
+    const jwt = await new SignJWT({
+      ...claims,
+      ...(options?.ip && { ip: options.ip }) // Add IP to payload if provided
+    })
       .setProtectedHeader({ alg: signingKey.algorithm, kid: signingKey.id })
       .setSubject(subject)
       .setIssuer(env.AUTH_JWT_ISSUER)
       .setAudience(env.AUTH_JWT_AUDIENCE)
       .setIssuedAt()
-      .setExpirationTime(env.AUTH_JWT_ACCESS_EXPIRES_IN)
+      .setExpirationTime(expiresIn)
       .sign(key);
-    
-    Logger.debug('JWT token created successfully', { keyId: signingKey.id, operation: 'jwt_create' });
+
+    Logger.debug('JWT token created successfully', { keyId: signingKey.id, operation: 'jwt_create', isAdmin, expiresIn });
     return jwt;
   } catch (error) {
     // Fallback to environment keys if rotation service fails
     Logger.warn('Key rotation service unavailable, using fallback keys', { error: error instanceof Error ? error.message : String(error), operation: 'jwt_create' });
-    
+
+    const ADMIN_ROLES = ['HEAD_ADMIN', 'DEPT_ADMIN', 'PLACEMENTS_ADMIN', 'SUPER_ADMIN'];
+    const userRoles = (claims.roles as string[]) || [];
+    const isAdmin = userRoles.some(role => ADMIN_ROLES.includes(role));
+    const expiresIn = isAdmin ? '15m' : env.AUTH_JWT_ACCESS_EXPIRES_IN;
+
     const key = await privateKeyPromise!;
-    const jwt = await new SignJWT({ ...claims })
+    const jwt = await new SignJWT({
+      ...claims,
+      ...(options?.ip && { ip: options.ip })
+    })
       .setProtectedHeader({ alg: "RS256", kid: env.AUTH_JWT_KID })
       .setSubject(subject)
       .setIssuer(env.AUTH_JWT_ISSUER)
       .setAudience(env.AUTH_JWT_AUDIENCE)
       .setIssuedAt()
-      .setExpirationTime(env.AUTH_JWT_ACCESS_EXPIRES_IN)
+      .setExpirationTime(expiresIn)
       .sign(key);
-    
-    Logger.debug('JWT token created with fallback key', { operation: 'jwt_create' });
+
+    Logger.debug('JWT token created with fallback key', { operation: 'jwt_create', isAdmin, expiresIn });
     return jwt;
   }
 }
 
 export async function getJWKS() {
   const keys = [];
-  
+
   // Add static environment key
   const staticJwk = await publicJWKPromise!;
   keys.push(staticJwk);
-  
+
   // Add dynamic rotation keys
   try {
     const activeKeys = await JWTKeyRotationService.getActiveKeys();
@@ -156,19 +175,19 @@ export async function getJWKS() {
         const { importSPKI, exportJWK } = await import('jose');
         const publicKey = await importSPKI(keyPair.publicKey, keyPair.algorithm as any);
         const jwk = await exportJWK(publicKey);
-        
+
         // Add required JWK fields
         jwk.alg = keyPair.algorithm;
         jwk.use = 'sig';
         jwk.kid = keyPair.id;
-        
+
         keys.push(jwk);
       }
     }
   } catch (error) {
     console.warn('[JWKS] Failed to load rotation keys, using static key only:', error);
   }
-  
+
   return { keys };
 }
 
@@ -182,11 +201,11 @@ export async function verifyAccessToken(token: string): Promise<JWTPayload> {
     // Decode header to get key ID
     const header = decodeProtectedHeader(token);
     const keyId = header.kid;
-    
+
     if (keyId) {
       // Try to get key from rotation service
       const keyPair = await JWTKeyRotationService.getKeyById(keyId);
-      
+
       if (keyPair && (keyPair.status === 'active' || keyPair.status === 'rotating')) {
         const publicKey = await importSPKI(keyPair.publicKey, keyPair.algorithm as any);
         const { payload } = await jwtVerify(token, publicKey, {
@@ -194,18 +213,18 @@ export async function verifyAccessToken(token: string): Promise<JWTPayload> {
           audience: env.AUTH_JWT_AUDIENCE,
           algorithms: [keyPair.algorithm as any],
         });
-        
+
         Logger.debug('JWT token verified with rotated key', { keyId, operation: 'jwt_verify' });
-        
+
         // Check if user tokens are revoked
         if (payload.sub && await isUserTokensRevoked(payload.sub)) {
           throw new Error('All user tokens have been revoked');
         }
-        
+
         return payload;
       }
     }
-    
+
     // Fallback to environment key if rotation service key not found
     Logger.warn('Key not found in rotation service, trying fallback key', { keyId, operation: 'jwt_verify' });
     const key = await publicKeyPromise!;
@@ -214,23 +233,23 @@ export async function verifyAccessToken(token: string): Promise<JWTPayload> {
       audience: env.AUTH_JWT_AUDIENCE,
       algorithms: ["RS256"],
     });
-    
+
     Logger.debug('JWT token verified with fallback key', { operation: 'jwt_verify' });
-    
+
     // Check if user tokens are revoked
     if (payload.sub && await isUserTokensRevoked(payload.sub)) {
       throw new Error('All user tokens have been revoked');
     }
-    
+
     return payload;
   } catch (error) {
     // If rotation service fails, try all active keys
     try {
       const activeKeys = await JWTKeyRotationService.getActiveKeys();
-      
+
       for (const keyPair of activeKeys) {
         if (keyPair.status !== 'active' && keyPair.status !== 'rotating') continue;
-        
+
         try {
           const publicKey = await importSPKI(keyPair.publicKey, keyPair.algorithm as any);
           const { payload } = await jwtVerify(token, publicKey, {
@@ -238,7 +257,7 @@ export async function verifyAccessToken(token: string): Promise<JWTPayload> {
             audience: env.AUTH_JWT_AUDIENCE,
             algorithms: [keyPair.algorithm as any],
           });
-          
+
           Logger.debug('JWT token verified with key', { keyId: keyPair.id, operation: 'jwt_verify' });
           return payload;
         } catch (keyError) {
@@ -250,7 +269,7 @@ export async function verifyAccessToken(token: string): Promise<JWTPayload> {
       // Rotation service completely unavailable, use fallback
       Logger.warn('Rotation service unavailable, using fallback verification', { operation: 'jwt_verify' });
     }
-    
+
     // Final fallback to environment key
     const key = await publicKeyPromise!;
     const { payload } = await jwtVerify(token, key, {

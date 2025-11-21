@@ -12,11 +12,22 @@ export const prisma = new PrismaClient({
       url: env.DATABASE_URL
     }
   },
-  log: env.NODE_ENV === 'development' 
+  // Configure connection pool via Prisma Client options if not in URL
+  // Note: Prisma recommends setting pool options in the connection string, 
+  // but we can log the configuration here for visibility.
+  log: env.NODE_ENV === 'development'
     ? ['query', 'info', 'warn', 'error']
     : ['error'],
   errorFormat: 'pretty'
 });
+
+// Log connection pool configuration
+const poolConfig = {
+  connectionLimit,
+  poolTimeout,
+  connectionTimeout
+};
+console.log('Database connection pool configured:', poolConfig);
 
 // Connection health monitoring
 export async function checkDatabaseHealth(): Promise<{
@@ -27,14 +38,14 @@ export async function checkDatabaseHealth(): Promise<{
   try {
     // Simple connectivity test
     await prisma.$queryRaw`SELECT 1 as health_check`;
-    
+
     // Get connection count if possible
     const result = await prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT count(*) as count 
       FROM pg_stat_activity 
       WHERE datname = current_database()
     `;
-    
+
     return {
       healthy: true,
       connectionCount: Number(result[0]?.count || 0)

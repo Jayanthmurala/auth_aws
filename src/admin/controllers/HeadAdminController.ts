@@ -9,22 +9,31 @@ import { logAdminAction } from '../middleware/auditLogger.js';
 import { AdminConfirmationService } from '../services/AdminConfirmationService.js';
 import { env } from '../../config/env.js';
 import { prisma } from '../../db.js';
-import { 
-  CreateUserRequest, 
-  UpdateUserRequest, 
+import {
+  CreateUserRequest,
+  UpdateUserRequest,
   BulkUserOperation,
   AdminResponse,
   AdminUserFilters,
   PaginationParams
 } from '../types/adminTypes.js';
-import { 
+import {
   parseAndValidateQuery,
   userFiltersQuerySchema,
   paginationQuerySchema,
+  sanitizeStringInput, // CRITICAL FIX: Add input sanitization
+  sanitizeEmailInput,
+  sanitizeCodeInput
+} from '../utils/inputValidation.js';
+import {
   analyticsQuerySchema,
   auditLogsQuerySchema,
   exportQuerySchema
-} from '../utils/inputValidation.js';
+} from '../validators/adminAnalyticsSchemas.js';
+import {
+  userFiltersSchema,
+  paginationSchema
+} from '../validators/adminUserSchemas.js';
 import {
   validateRoleEscalation,
   canManageUser,
@@ -40,9 +49,9 @@ import {
   logEncryptionOperation,
   sanitizeExportData
 } from '../utils/dataEncryption.js';
-import { 
-  getCollegeScopedWhere, 
-  canAccessCollegeResource 
+import {
+  getCollegeScopedWhere,
+  canAccessCollegeResource
 } from '../middleware/collegeScope.js';
 
 export class HeadAdminController {
@@ -53,6 +62,18 @@ export class HeadAdminController {
     try {
       const adminRequest = request as AdminRequest;
       const collegeId = adminRequest.admin.collegeId;
+
+      // MEDIUM PRIORITY: Add caching for dashboard stats
+      const { RedisManager } = await import('../../config/redis.js');
+      const redis = RedisManager.getInstance();
+      const cacheKey = `dashboard:head:${collegeId}`;
+
+      if (!env.REDIS_DISABLED) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          return reply.send(JSON.parse(cached));
+        }
+      }
 
       const [
         collegeAnalytics,
@@ -75,15 +96,20 @@ export class HeadAdminController {
         }
       };
 
+      if (!env.REDIS_DISABLED) {
+        // Cache for 5 minutes
+        await redis.setex(cacheKey, 300, JSON.stringify(response));
+      }
+
       return reply.send(response);
     } catch (error) {
       await logAdminAction(
-        request, 
-        'LOGIN', 
-        'DASHBOARD', 
-        undefined, 
-        undefined, 
-        false, 
+        request,
+        'LOGIN',
+        'DASHBOARD',
+        undefined,
+        undefined,
+        false,
         error instanceof Error ? error.message : 'Unknown error'
       );
 
@@ -108,22 +134,30 @@ export class HeadAdminController {
       let pagination: PaginationParams;
 
       try {
-        const validatedFilters = userFiltersQuerySchema.parse(request.query);
-        const validatedPagination = paginationQuerySchema.parse(request.query);
-        
-        filters = validatedFilters;
-        pagination = validatedPagination;
+        // Use the same schemas as the route
+        const mergedSchema = userFiltersSchema.merge(paginationSchema);
+        const validatedQuery = mergedSchema.parse(request.query);
+
+        // Extract filters and pagination from merged result
+        const { page, limit, sortBy, sortOrder, ...filterFields } = validatedQuery;
+        filters = filterFields as AdminUserFilters;
+        pagination = { page, limit, sortBy, sortOrder };
       } catch (error) {
+        console.error('🚨 [HeadAdminController] Validation error:', error);
         if (error instanceof z.ZodError) {
-          return reply.status(400).send({
+          console.error('🚨 [HeadAdminController] Zod validation errors:', error.errors);
+          const errorResponse = {
             success: false,
             message: 'Invalid query parameters',
             errors: error.errors.map((err: any) => ({
               field: err.path.join('.'),
               message: err.message
             }))
-          });
+          };
+          console.error('🚨 [HeadAdminController] Sending error response:', errorResponse);
+          return reply.status(400).send(errorResponse);
         }
+        console.error('🚨 [HeadAdminController] Non-Zod error:', error);
         throw error;
       }
 
@@ -150,6 +184,43 @@ export class HeadAdminController {
   }
 
   /**
+   * Get a specific user by ID
+   */
+  static async getUser(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const adminRequest = request as AdminRequest;
+      const { userId } = request.params as { userId: string };
+
+      // Get college-scoped where clause
+      const adminScope = getCollegeScopedWhere(request);
+
+      const user = await AdminUserService.getUserById(userId, adminScope);
+
+      if (!user) {
+        const response: AdminResponse = {
+          success: false,
+          message: 'User not found'
+        };
+        return reply.status(404).send(response);
+      }
+
+      const response: AdminResponse = {
+        success: true,
+        data: user
+      };
+
+      return reply.send(response);
+    } catch (error) {
+      const response: AdminResponse = {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to fetch user'
+      };
+
+      return reply.status(500).send(response);
+    }
+  }
+
+  /**
    * Create a new user with privilege escalation protection
    */
   static async createUser(request: FastifyRequest, reply: FastifyReply) {
@@ -157,24 +228,38 @@ export class HeadAdminController {
       const adminRequest = request as AdminRequest;
       const userData = request.body as CreateUserRequest;
 
+      // CRITICAL FIX: Sanitize all string inputs to prevent injection attacks
+      if (userData.email) {
+        userData.email = sanitizeEmailInput(userData.email);
+      }
+      if (userData.displayName) {
+        userData.displayName = sanitizeStringInput(userData.displayName, 100);
+      }
+      if (userData.department) {
+        userData.department = sanitizeCodeInput(userData.department);
+      }
+      if (userData.collegeId) {
+        userData.collegeId = sanitizeCodeInput(userData.collegeId);
+      }
+
       // CRITICAL SECURITY: Validate role assignment permissions
       if (userData.roles && userData.roles.length > 0) {
         const roleCheck = canAssignRoles(adminRequest.admin.roles, userData.roles);
         if (!roleCheck.valid) {
           await logAdminAction(
-            request, 
-            'CREATE_USER', 
-            'USER', 
-            undefined, 
-            { 
+            request,
+            'CREATE_USER',
+            'USER',
+            undefined,
+            {
               userData: { ...userData, password: '[REDACTED]' },
               privilegeViolation: {
                 reason: roleCheck.reason,
                 invalidRoles: roleCheck.invalidRoles,
                 adminRoles: adminRequest.admin.roles
               }
-            }, 
-            false, 
+            },
+            false,
             `Privilege escalation attempt: ${roleCheck.reason}`
           );
 
@@ -183,7 +268,7 @@ export class HeadAdminController {
             message: roleCheck.reason,
             details: {
               invalidRoles: roleCheck.invalidRoles,
-              allowedRoles: userData.roles.filter(role => 
+              allowedRoles: userData.roles.filter(role =>
                 !roleCheck.invalidRoles?.includes(role)
               )
             }
@@ -210,11 +295,11 @@ export class HeadAdminController {
       }
 
       await logAdminAction(
-        request, 
-        'CREATE_USER', 
-        'USER', 
-        user.id, 
-        { 
+        request,
+        'CREATE_USER',
+        'USER',
+        user.id,
+        {
           userData: { ...userData, password: '[REDACTED]' },
           privilegeValidated: true
         }
@@ -229,12 +314,12 @@ export class HeadAdminController {
       return reply.status(201).send(response);
     } catch (error) {
       await logAdminAction(
-        request, 
-        'CREATE_USER', 
-        'USER', 
-        undefined, 
-        { userData: request.body }, 
-        false, 
+        request,
+        'CREATE_USER',
+        'USER',
+        undefined,
+        { userData: request.body },
+        false,
         error instanceof Error ? error.message : 'Unknown error'
       );
 
@@ -256,14 +341,25 @@ export class HeadAdminController {
       const { userId } = request.params as { userId: string };
       const updateData = request.body as UpdateUserRequest;
 
+      // CRITICAL FIX: Sanitize all string inputs to prevent injection attacks
+      if (updateData.email) {
+        updateData.email = sanitizeEmailInput(updateData.email);
+      }
+      if (updateData.displayName) {
+        updateData.displayName = sanitizeStringInput(updateData.displayName, 100);
+      }
+      if (updateData.department) {
+        updateData.department = sanitizeCodeInput(updateData.department);
+      }
+
       // CRITICAL SECURITY: Get current user data for privilege validation
       const currentUser = await prisma.user.findUnique({
         where: { id: userId },
-        select: { 
-          id: true, 
-          roles: true, 
-          collegeId: true, 
-          department: true 
+        select: {
+          id: true,
+          roles: true,
+          collegeId: true,
+          department: true
         }
       });
 
@@ -284,19 +380,19 @@ export class HeadAdminController {
 
       if (!managementCheck.valid) {
         await logAdminAction(
-          request, 
-          'UPDATE_USER', 
-          'USER', 
-          userId, 
-          { 
+          request,
+          'UPDATE_USER',
+          'USER',
+          userId,
+          {
             updateData,
             managementViolation: {
               reason: managementCheck.reason,
               adminRoles: adminRequest.admin.roles,
               targetUserRoles: currentUser.roles
             }
-          }, 
-          false, 
+          },
+          false,
           `Management permission denied: ${managementCheck.reason}`
         );
 
@@ -318,11 +414,11 @@ export class HeadAdminController {
 
         if (!escalationCheck.valid) {
           await logAdminAction(
-            request, 
-            'UPDATE_USER', 
-            'USER', 
-            userId, 
-            { 
+            request,
+            'UPDATE_USER',
+            'USER',
+            userId,
+            {
               updateData,
               escalationViolation: {
                 reason: escalationCheck.reason,
@@ -330,8 +426,8 @@ export class HeadAdminController {
                 toRoles: updateData.roles,
                 adminRoles: adminRequest.admin.roles
               }
-            }, 
-            false, 
+            },
+            false,
             `Privilege escalation blocked: ${escalationCheck.reason}`
           );
 
@@ -365,11 +461,11 @@ export class HeadAdminController {
       );
 
       await logAdminAction(
-        request, 
-        'UPDATE_USER', 
-        'USER', 
-        userId, 
-        { 
+        request,
+        'UPDATE_USER',
+        'USER',
+        userId,
+        {
           updateData,
           privilegeValidated: true,
           managementValidated: true
@@ -385,12 +481,12 @@ export class HeadAdminController {
       return reply.send(response);
     } catch (error) {
       await logAdminAction(
-        request, 
-        'UPDATE_USER', 
-        'USER', 
-        request.params ? (request.params as any).userId : undefined, 
-        { updateData: request.body }, 
-        false, 
+        request,
+        'UPDATE_USER',
+        'USER',
+        request.params ? (request.params as any).userId : undefined,
+        { updateData: request.body },
+        false,
         error instanceof Error ? error.message : 'Unknown error'
       );
 
@@ -428,12 +524,12 @@ export class HeadAdminController {
       return reply.send(response);
     } catch (error) {
       await logAdminAction(
-        request, 
-        'DELETE_USER', 
-        'USER', 
-        request.params ? (request.params as any).userId : undefined, 
-        undefined, 
-        false, 
+        request,
+        'DELETE_USER',
+        'USER',
+        request.params ? (request.params as any).userId : undefined,
+        undefined,
+        false,
         error instanceof Error ? error.message : 'Unknown error'
       );
 
@@ -452,7 +548,7 @@ export class HeadAdminController {
   static async bulkUserOperation(request: FastifyRequest, reply: FastifyReply) {
     try {
       const adminRequest = request as AdminRequest;
-      const operation = request.body as BulkUserOperation & { 
+      const operation = request.body as BulkUserOperation & {
         confirmationToken?: string;
       };
 
@@ -466,8 +562,8 @@ export class HeadAdminController {
       }
 
       // CRITICAL SECURITY: Require confirmation for dangerous operations
-      const isDangerous = ['DELETE', 'SUSPEND'].includes(operation.action) || 
-                         operation.users.length > 50;
+      const isDangerous = ['DELETE', 'SUSPEND'].includes(operation.action) ||
+        operation.users.length > 50;
 
       if (isDangerous && !operation.confirmationToken && !operation.preview) {
         const confirmationToken = await AdminConfirmationService.generateConfirmationToken(
@@ -479,18 +575,18 @@ export class HeadAdminController {
             userIds: operation.users.map((u: any) => u.id).filter(Boolean)
           }
         );
-        
+
         return reply.status(202).send({
           success: false,
           message: 'Confirmation required for bulk operation',
-          data: { 
+          data: {
             confirmationToken,
             requiresConfirmation: true,
             operationSummary: {
               action: operation.action,
               userCount: operation.users.length,
               estimatedTime: Math.ceil(operation.users.length / 10) + ' seconds',
-              warningMessage: operation.action === 'DELETE' 
+              warningMessage: operation.action === 'DELETE'
                 ? 'This will permanently delete user accounts. This action cannot be undone.'
                 : 'This will suspend user accounts and prevent them from logging in.'
             }
@@ -504,7 +600,7 @@ export class HeadAdminController {
           adminRequest.admin.id,
           operation.confirmationToken!
         );
-        
+
         if (!tokenValid) {
           return reply.status(403).send({
             success: false,
@@ -521,12 +617,12 @@ export class HeadAdminController {
       );
 
       await logAdminAction(
-        request, 
-        'BULK_IMPORT', 
-        'USER', 
-        undefined, 
-        { 
-          action: operation.action, 
+        request,
+        'BULK_IMPORT',
+        'USER',
+        undefined,
+        {
+          action: operation.action,
           totalUsers: operation.users.length,
           preview: operation.preview,
           confirmed: isDangerous && !operation.preview,
@@ -537,20 +633,20 @@ export class HeadAdminController {
       const response: AdminResponse = {
         success: true,
         data: result,
-        message: operation.preview 
-          ? 'Bulk operation preview completed' 
+        message: operation.preview
+          ? 'Bulk operation preview completed'
           : `Bulk operation completed successfully. ${operation.users.length} users processed.`
       };
 
       return reply.send(response);
     } catch (error) {
       await logAdminAction(
-        request, 
-        'BULK_IMPORT', 
-        'USER', 
-        undefined, 
-        { operation: request.body }, 
-        false, 
+        request,
+        'BULK_IMPORT',
+        'USER',
+        undefined,
+        { operation: request.body },
+        false,
         error instanceof Error ? error.message : 'Unknown error'
       );
 
@@ -570,9 +666,9 @@ export class HeadAdminController {
     try {
       const adminRequest = request as AdminRequest;
       const { userId } = request.params as { userId: string };
-      const { newPassword, confirmationCode } = request.body as { 
-        newPassword: string; 
-        confirmationCode?: string; 
+      const { newPassword, confirmationCode } = request.body as {
+        newPassword: string;
+        confirmationCode?: string;
       };
 
       // CRITICAL SECURITY: Require MFA confirmation for password reset
@@ -582,12 +678,12 @@ export class HeadAdminController {
           adminRequest.admin.id,
           userId
         );
-        
+
         return reply.status(202).send({
           success: false,
           message: 'MFA confirmation required for password reset',
-          data: { 
-            challengeId, 
+          data: {
+            challengeId,
             requiresMFA: true,
             instructions: 'Use the 6-digit code sent to your registered MFA method'
           }
@@ -601,15 +697,15 @@ export class HeadAdminController {
         confirmationCode,
         adminRequest.admin.id
       );
-      
+
       if (!verification.valid) {
         await logAdminAction(
-          request, 
-          'PASSWORD_RESET', 
-          'USER', 
-          userId, 
-          { mfaFailed: true, error: verification.error }, 
-          false, 
+          request,
+          'PASSWORD_RESET',
+          'USER',
+          userId,
+          { mfaFailed: true, error: verification.error },
+          false,
           `MFA verification failed: ${verification.error}`
         );
 
@@ -641,12 +737,12 @@ export class HeadAdminController {
       return reply.send(response);
     } catch (error) {
       await logAdminAction(
-        request, 
-        'PASSWORD_RESET', 
-        'USER', 
-        request.params ? (request.params as any).userId : undefined, 
-        undefined, 
-        false, 
+        request,
+        'PASSWORD_RESET',
+        'USER',
+        request.params ? (request.params as any).userId : undefined,
+        undefined,
+        false,
         error instanceof Error ? error.message : 'Unknown error'
       );
 
@@ -701,10 +797,10 @@ export class HeadAdminController {
       );
 
       await logAdminAction(
-        request, 
-        'UPDATE_COLLEGE', 
-        'COLLEGE', 
-        collegeId, 
+        request,
+        'UPDATE_COLLEGE',
+        'COLLEGE',
+        collegeId,
         { updates }
       );
 
@@ -717,12 +813,12 @@ export class HeadAdminController {
       return reply.send(response);
     } catch (error) {
       await logAdminAction(
-        request, 
-        'UPDATE_COLLEGE', 
-        'COLLEGE', 
-        (request as AdminRequest).admin.collegeId, 
-        { updates: request.body }, 
-        false, 
+        request,
+        'UPDATE_COLLEGE',
+        'COLLEGE',
+        (request as AdminRequest).admin.collegeId,
+        { updates: request.body },
+        false,
         error instanceof Error ? error.message : 'Unknown error'
       );
 
@@ -749,13 +845,13 @@ export class HeadAdminController {
       switch (type) {
         case 'growth':
           analyticsData = await AdminAnalyticsService.getUserGrowthAnalytics(
-            collegeId, 
+            collegeId,
             parseInt(months) || 12
           );
           break;
         case 'activity':
           analyticsData = await AdminAnalyticsService.getLoginActivityAnalytics(
-            collegeId, 
+            collegeId,
             parseInt(days) || 30
           );
           break;
@@ -829,8 +925,15 @@ export class HeadAdminController {
   static async exportData(request: FastifyRequest, reply: FastifyReply) {
     try {
       const adminRequest = request as AdminRequest;
-      
+
       // SECURITY: Validate query parameters
+      console.log('🔍 [HeadAdminController] Raw query parameters:', request.query);
+      console.log('🔍 [HeadAdminController] Query parameter types:',
+        Object.entries(request.query || {}).map(([key, value]) =>
+          `${key}: ${typeof value} (${value})`
+        )
+      );
+
       let validatedQuery;
       try {
         validatedQuery = exportQuerySchema.parse(request.query);
@@ -848,7 +951,7 @@ export class HeadAdminController {
         throw error;
       }
 
-      const { type, format, encrypted, department, role } = validatedQuery;
+      const { type, format, encrypted, department, role, roles, status, search, year, hasNeverLoggedIn } = validatedQuery;
       const collegeId = adminRequest.admin.collegeId;
 
       // CRITICAL SECURITY: Validate encryption key before proceeding
@@ -876,7 +979,13 @@ export class HeadAdminController {
 
       switch (type) {
         case 'users':
-          csvContent = await AdminAnalyticsService.exportAnalyticsData(collegeId, 'users', department, role);
+          csvContent = await AdminAnalyticsService.exportAnalyticsData(
+            collegeId,
+            'users',
+            department,
+            role,
+            { roles, status, search, year, hasNeverLoggedIn }
+          );
           baseFilename = `users-${collegeId}-${new Date().toISOString().split('T')[0]}.csv`;
           recordCount = csvContent.split('\n').length - 1; // Subtract header row
           break;
@@ -901,15 +1010,15 @@ export class HeadAdminController {
 
       // SECURITY: Sanitize data before export/encryption
       const sanitizedContent = sanitizeExportData(csvContent, type);
-      
+
       // SECURITY: Determine if encryption is required
       const shouldEncrypt = encrypted && (requiresEncryption(type) || encrypted === true);
-      
+
       if (shouldEncrypt) {
         // Encrypt the data
         const encryptionResult = encryptExportData(sanitizedContent, type, recordCount);
         const secureFilename = generateSecureFilename(baseFilename, true, adminRequest.admin.id);
-        
+
         // Log encryption operation
         logEncryptionOperation(
           adminRequest.admin.id,
@@ -920,13 +1029,13 @@ export class HeadAdminController {
         );
 
         await logAdminAction(
-          request, 
-          'EXPORT_DATA', 
-          'DATA', 
-          undefined, 
-          { 
-            type, 
-            format, 
+          request,
+          'EXPORT_DATA',
+          'DATA',
+          undefined,
+          {
+            type,
+            format,
             encrypted: true,
             recordCount,
             filename: secureFilename,
@@ -939,20 +1048,20 @@ export class HeadAdminController {
         reply.header('X-Encryption-Method', encryptionResult.algorithm);
         reply.header('X-Encryption-KeyId', encryptionResult.keyId);
         reply.header('X-Record-Count', recordCount.toString());
-        
+
         return reply.send(encryptionResult.encryptedData);
       } else {
         // Send unencrypted data
         const filename = generateSecureFilename(baseFilename, false, adminRequest.admin.id);
-        
+
         await logAdminAction(
-          request, 
-          'EXPORT_DATA', 
-          'DATA', 
-          undefined, 
-          { 
-            type, 
-            format, 
+          request,
+          'EXPORT_DATA',
+          'DATA',
+          undefined,
+          {
+            type,
+            format,
             encrypted: false,
             recordCount,
             filename
@@ -962,7 +1071,7 @@ export class HeadAdminController {
         reply.header('Content-Type', 'text/csv');
         reply.header('Content-Disposition', `attachment; filename="${filename}"`);
         reply.header('X-Record-Count', recordCount.toString());
-        
+
         return reply.send(sanitizedContent);
       }
     } catch (error) {
@@ -980,16 +1089,16 @@ export class HeadAdminController {
       }
 
       await logAdminAction(
-        request, 
-        'EXPORT_DATA', 
-        'DATA', 
-        undefined, 
-        { 
-          type: query.type, 
+        request,
+        'EXPORT_DATA',
+        'DATA',
+        undefined,
+        {
+          type: query.type,
           format: query.format,
           error: error instanceof Error ? error.message : 'Unknown error'
-        }, 
-        false, 
+        },
+        false,
         error instanceof Error ? error.message : 'Unknown error'
       );
 

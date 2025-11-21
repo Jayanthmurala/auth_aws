@@ -11,6 +11,7 @@ import {
   ADMIN_LIMITS
 } from '../types/adminTypes.js';
 import { checkAdminLimits } from '../middleware/collegeScope.js';
+import { canAssignRoles, validateRoleEscalation } from '../utils/roleHierarchy.js';
 
 export class AdminUserService {
   /**
@@ -277,10 +278,12 @@ export class AdminUserService {
       ];
     }
 
-    if (filters.createdAfter || filters.createdBefore) {
-      where.createdAt = {};
-      if (filters.createdAfter) where.createdAt.gte = filters.createdAfter;
-      if (filters.createdBefore) where.createdAt.lte = filters.createdBefore;
+    if (filters.hasNeverLoggedIn !== undefined) {
+      if (filters.hasNeverLoggedIn) {
+        where.lastLoginAt = null;
+      } else {
+        where.lastLoginAt = { not: null };
+      }
     }
 
     const [users, total] = await Promise.all([
@@ -324,6 +327,59 @@ export class AdminUserService {
         total,
         totalPages: Math.ceil(total / take)
       }
+    };
+  }
+
+  /**
+   * Get a specific user by ID with admin scope
+   */
+  static async getUserById(userId: string, adminScope: any) {
+    const user = await prisma.user.findFirst({
+      where: {
+        id: userId,
+        ...adminScope
+      },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        roles: true,
+        collegeId: true,
+        department: true,
+        year: true,
+        collegeMemberId: true,
+        status: true,
+        emailVerifiedAt: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+        college: {
+          select: {
+            name: true
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      roles: user.roles,
+      collegeId: user.collegeId,
+      collegeName: user.college?.name,
+      department: user.department,
+      year: user.year,
+      collegeMemberId: user.collegeMemberId,
+      status: user.status,
+      emailVerifiedAt: user.emailVerifiedAt?.toISOString(),
+      lastLoginAt: user.lastLoginAt?.toISOString(),
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
     };
   }
 
@@ -473,6 +529,7 @@ export class AdminUserService {
 
   /**
    * Validate bulk user operation
+   * CRITICAL FIX: Added college scoping validation for each user
    */
   private static async validateBulkUser(
     action: string,
@@ -487,12 +544,25 @@ export class AdminUserService {
           throw new Error('Missing required fields: email, displayName, collegeId');
         }
         
+        // CRITICAL FIX: Validate college scoping
+        if (userData.collegeId !== adminCollegeId) {
+          throw new Error(`Cannot create users in other colleges. Requested: ${userData.collegeId}, Your college: ${adminCollegeId}`);
+        }
+        
         // Check if email already exists
         const existingUser = await prisma.user.findUnique({
           where: { email: userData.email }
         });
         if (existingUser) {
           throw new Error(`Email ${userData.email} already exists`);
+        }
+        
+        // CRITICAL FIX: Validate role assignment permissions
+        if (userData.roles && userData.roles.length > 0) {
+          const roleCheck = canAssignRoles(adminRoles, userData.roles);
+          if (!roleCheck.valid) {
+            throw new Error(`Invalid role assignment: ${roleCheck.reason}`);
+          }
         }
         break;
 
@@ -505,10 +575,38 @@ export class AdminUserService {
         }
         
         const user = await prisma.user.findUnique({
-          where: { id: userData.id }
+          where: { id: userData.id },
+          select: { id: true, collegeId: true, roles: true }
         });
         if (!user) {
           throw new Error(`User with id ${userData.id} not found`);
+        }
+        
+        // CRITICAL FIX: Validate college scoping for all operations
+        if (user.collegeId !== adminCollegeId) {
+          throw new Error(`Cannot manage users from other colleges. User college: ${user.collegeId}, Your college: ${adminCollegeId}`);
+        }
+        
+        // CRITICAL FIX: Prevent managing admin users
+        const hasAdminRole = user.roles.some(role => 
+          ['HEAD_ADMIN', 'DEPT_ADMIN', 'PLACEMENTS_ADMIN', 'SUPER_ADMIN'].includes(role)
+        );
+        if (hasAdminRole) {
+          throw new Error(`Cannot manage admin users. User has roles: ${user.roles.join(', ')}`);
+        }
+        
+        // CRITICAL FIX: Validate role escalation for UPDATE operations
+        if (action === 'UPDATE' && userData.roles && userData.roles.length > 0) {
+          const escalationCheck = validateRoleEscalation(
+            adminRoles,
+            'bulk-admin-id', // Placeholder, actual admin ID should be passed
+            user.id,
+            user.roles,
+            userData.roles
+          );
+          if (!escalationCheck.valid) {
+            throw new Error(`Invalid role escalation: ${escalationCheck.reason}`);
+          }
         }
         break;
     }

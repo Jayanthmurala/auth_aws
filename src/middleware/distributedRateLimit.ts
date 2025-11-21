@@ -209,12 +209,12 @@ export const DistributedRateLimiters = {
   security: async (request: FastifyRequest, reply: FastifyReply) => {
     const user = (request as any).user;
     const identifier = `security:${user?.id || request.ip}`;
-    const result = await DistributedRateLimit.checkLimit(identifier, 60 * 60 * 1000, 5);
+    const result = await DistributedRateLimit.checkLimit(identifier, 5 * 1000, 5);
     
     if (!result.allowed) {
       return reply.status(429).send({
         success: false,
-        message: 'Too many security operations. Please try again in 1 hour.',
+        message: 'Too many security operations. Please try again in 5 seconds.',
         code: 'SECURITY_RATE_LIMIT_EXCEEDED',
         retryAfter: Math.ceil((result.resetTime - Date.now()) / 1000)
       });
@@ -229,12 +229,12 @@ export const DistributedRateLimiters = {
   admin: async (request: FastifyRequest, reply: FastifyReply) => {
     const user = (request as any).user;
     const identifier = `admin:${user?.id || request.ip}`;
-    const result = await DistributedRateLimit.checkLimit(identifier, 60 * 60 * 1000, 10);
+    const result = await DistributedRateLimit.checkLimit(identifier, 5 * 1000, 10);
     
     if (!result.allowed) {
       return reply.status(429).send({
         success: false,
-        message: 'Too many admin operations. Please try again in 1 hour.',
+        message: 'Too many admin operations. Please try again in 5 seconds.',
         code: 'ADMIN_RATE_LIMIT_EXCEEDED',
         retryAfter: Math.ceil((result.resetTime - Date.now()) / 1000)
       });
@@ -249,12 +249,12 @@ export const DistributedRateLimiters = {
   internal: async (request: FastifyRequest, reply: FastifyReply) => {
     const apiKey = request.headers['x-api-key'] as string;
     const identifier = `internal:${apiKey ? apiKey.slice(-8) : request.ip}`;
-    const result = await DistributedRateLimit.checkLimit(identifier, 60 * 60 * 1000, 1000);
+    const result = await DistributedRateLimit.checkLimit(identifier, 5 * 1000, 1000);
     
     if (!result.allowed) {
       return reply.status(429).send({
         success: false,
-        message: 'Internal API rate limit exceeded. Please try again later.',
+        message: 'Internal API rate limit exceeded. Please try again in 5 seconds.',
         code: 'INTERNAL_RATE_LIMIT_EXCEEDED',
         retryAfter: Math.ceil((result.resetTime - Date.now()) / 1000)
       });

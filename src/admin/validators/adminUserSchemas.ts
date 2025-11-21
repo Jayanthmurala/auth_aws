@@ -59,36 +59,65 @@ export const resetPasswordSchema = z.object({
 
 // Query parameter schemas with security validation
 export const userFiltersSchema = z.object({
-  roles: z.string().optional().transform(val => {
+  roles: z.union([z.string(), z.array(z.string())]).optional().transform(val => {
     if (!val) return undefined;
-    const roles = val.split(',').filter(role => ['STUDENT', 'FACULTY'].includes(role));
+    // Handle both string and array inputs
+    const roleArray = Array.isArray(val) ? val : val.split(',');
+    const roles = roleArray.filter(role => 
+      ['STUDENT', 'FACULTY', 'DEPT_ADMIN', 'PLACEMENTS_ADMIN', 'HEAD_ADMIN', 'SUPER_ADMIN'].includes(role.trim())
+    );
     return roles.length > 0 ? roles : undefined;
   }),
-  departments: z.string().optional().transform(val => {
+  departments: z.union([z.string(), z.array(z.string())]).optional().transform(val => {
     if (!val) return undefined;
-    const depts = val.split(',').map(d => d.trim()).filter(d => d.length > 0 && d.length <= 100);
+    // Handle both string and array inputs
+    const deptArray = Array.isArray(val) ? val : val.split(',');
+    const depts = deptArray.map(d => d.trim()).filter(d => d.length > 0 && d.length <= 100);
     return depts.length > 0 ? depts : undefined;
   }),
-  status: z.string().optional().transform(val => {
+  status: z.union([z.string(), z.array(z.string())]).optional().transform(val => {
     if (!val) return undefined;
-    const statuses = val.split(',').filter(status => 
-      ['ACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION'].includes(status)
+    // Handle both string and array inputs
+    const statusArray = Array.isArray(val) ? val : val.split(',');
+    const statuses = statusArray.filter(status => 
+      ['ACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION', 'DELETED'].includes(status.trim())
     );
     return statuses.length > 0 ? statuses : undefined;
   }),
-  year: z.string().optional().transform(val => {
+  year: z.union([
+    z.string(), 
+    z.array(z.string()), 
+    z.number(), 
+    z.array(z.number())
+  ]).optional().transform(val => {
     if (!val) return undefined;
-    const years = val.split(',').map(Number).filter(y => y >= 1 && y <= 6);
+    // Handle string, string array, number, or number array inputs
+    let yearArray: (string | number)[];
+    if (Array.isArray(val)) {
+      yearArray = val;
+    } else {
+      yearArray = typeof val === 'string' ? val.split(',') : [val];
+    }
+    const years = yearArray.map(y => Number(y.toString().trim())).filter(y => y >= 1 && y <= 4);
     return years.length > 0 ? years : undefined;
   }),
   search: z.string().max(100).regex(/^[a-zA-Z0-9\s\-_.@]*$/, 'Invalid search characters').optional(),
-  createdAfter: z.string().datetime().optional().transform(val => val ? new Date(val) : undefined),
-  createdBefore: z.string().datetime().optional().transform(val => val ? new Date(val) : undefined)
+  hasNeverLoggedIn: z.union([z.string(), z.boolean()]).optional().transform(val => {
+    if (val === undefined || val === null) return undefined;
+    if (typeof val === 'boolean') return val;
+    return val.toLowerCase() === 'true';
+  })
 });
 
 export const paginationSchema = z.object({
-  page: z.string().optional().transform(val => Math.max(1, parseInt(val || '1'))),
-  limit: z.string().optional().transform(val => Math.min(100, Math.max(1, parseInt(val || '50')))),
+  page: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.max(1, val);
+    return Math.max(1, parseInt(val || '1'));
+  }),
+  limit: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.min(100, Math.max(1, val));
+    return Math.min(100, Math.max(1, parseInt(val || '50')));
+  }),
   sortBy: z.enum(['createdAt', 'displayName', 'email', 'status', 'year']).optional().default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).optional().default('desc')
 });
@@ -115,16 +144,28 @@ export const deptAdminQuerySchema = z.object({
   search: z.string().max(100).regex(/^[a-zA-Z0-9\s\-_.@]*$/, 'Search contains invalid characters').optional(),
   createdAfter: z.string().datetime().optional().transform(val => val ? new Date(val) : undefined),
   createdBefore: z.string().datetime().optional().transform(val => val ? new Date(val) : undefined),
-  page: z.string().optional().transform(val => Math.max(1, parseInt(val || '1'))),
-  limit: z.string().optional().transform(val => Math.min(100, Math.max(1, parseInt(val || '50')))),
+  page: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.max(1, val);
+    return Math.max(1, parseInt(val || '1'));
+  }),
+  limit: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.min(100, Math.max(1, val));
+    return Math.min(100, Math.max(1, parseInt(val || '50')));
+  }),
   sortBy: z.enum(['createdAt', 'displayName', 'email', 'status', 'year']).optional().default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).optional().default('desc')
 });
 
 // Export query schema for audit logs
 export const auditLogsQuerySchema = z.object({
-  page: z.string().optional().transform(val => Math.max(1, parseInt(val || '1'))),
-  limit: z.string().optional().transform(val => Math.min(100, Math.max(1, parseInt(val || '50')))),
+  page: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.max(1, val);
+    return Math.max(1, parseInt(val || '1'));
+  }),
+  limit: z.union([z.string(), z.number()]).optional().transform(val => {
+    if (typeof val === 'number') return Math.min(100, Math.max(1, val));
+    return Math.min(100, Math.max(1, parseInt(val || '50')));
+  }),
   sortBy: z.enum(['createdAt', 'action', 'targetType']).optional().default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
   actions: z.string().optional().transform(val => {
@@ -147,15 +188,21 @@ export const auditLogsQuerySchema = z.object({
 // Export query schema
 export const exportQuerySchema = z.object({
   type: z.enum(['users', 'audit'], { message: 'Export type must be users or audit' }),
-  roles: z.string().optional().transform(val => {
+  roles: z.union([z.string(), z.array(z.string())]).optional().transform(val => {
     if (!val) return undefined;
-    const roles = val.split(',').filter(role => ['STUDENT', 'FACULTY'].includes(role));
+    // Handle both string and array inputs
+    const roleArray = Array.isArray(val) ? val : val.split(',');
+    const roles = roleArray.filter(role => 
+      ['STUDENT', 'FACULTY', 'DEPT_ADMIN', 'PLACEMENTS_ADMIN', 'HEAD_ADMIN', 'SUPER_ADMIN'].includes(role.trim())
+    );
     return roles.length > 0 ? roles : undefined;
   }),
-  status: z.string().optional().transform(val => {
+  status: z.union([z.string(), z.array(z.string())]).optional().transform(val => {
     if (!val) return undefined;
-    const statuses = val.split(',').filter(status => 
-      ['ACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION'].includes(status)
+    // Handle both string and array inputs
+    const statusArray = Array.isArray(val) ? val : val.split(',');
+    const statuses = statusArray.filter(status => 
+      ['ACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION'].includes(status.trim())
     );
     return statuses.length > 0 ? statuses : undefined;
   }),

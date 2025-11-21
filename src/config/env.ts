@@ -51,7 +51,7 @@ export const env = {
   FRONTEND_URL: process.env.FRONTEND_URL ?? "http://localhost:3000",
   
   // CORS origins (comma-separated)
-  FRONTEND_URLS: process.env.FRONTEND_URLS ?? "http://localhost:3000,http://127.0.0.1:3000",
+  FRONTEND_URLS: process.env.FRONTEND_URLS ?? "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
   
   // Rate limiting
   RATE_LIMIT_MAX: Number(process.env.RATE_LIMIT_MAX ?? 100),
@@ -73,6 +73,9 @@ export const env = {
   
   // CSRF Secret for token generation
   CSRF_SECRET: requireSecret("CSRF_SECRET", 32),
+
+  // System Secret for inter-service authentication
+  SYSTEM_SECRET: process.env.SYSTEM_SECRET ?? "default-system-secret-change-in-production",
 
   // One-time token expirations
   EMAIL_VERIFICATION_EXPIRES_IN: process.env.EMAIL_VERIFICATION_EXPIRES_IN ?? "24h",
